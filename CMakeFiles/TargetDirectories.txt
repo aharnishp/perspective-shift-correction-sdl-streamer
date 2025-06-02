@@ -1,0 +1,3 @@
+/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3/CMakeFiles/DH2323SkeletonSDL2.dir
+/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3/CMakeFiles/edit_cache.dir
+/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3/CMakeFiles/rebuild_cache.dir

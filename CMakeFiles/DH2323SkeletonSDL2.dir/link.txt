@@ -1,0 +1,1 @@
+/usr/bin/c++ -O2 -Wall -arch arm64 -Wl,-search_paths_first -Wl,-headerpad_max_install_names -L/opt/homebrew/opt/llvm/lib CMakeFiles/DH2323SkeletonSDL2.dir/SkeletonSDL2.cpp.o CMakeFiles/DH2323SkeletonSDL2.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.o -o DH2323SkeletonSDL2  /opt/homebrew/lib/libSDL2.dylib -framework Cocoa /opt/homebrew/lib/libSDL2main.a
