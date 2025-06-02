@@ -1,0 +1,23 @@
+The Definition of the protocol used for UDP communication.
+
+From the streamer to the receiver (Port 8051):
+
+- captured timestamp
+
+- captured pose of camera
+
+- color jpeg image data
+
+- depth data (16 bit) PNG data (0 is error/infinite/unknown, and otherwise in millimeters.)
+
+
+
+From the VR receiver to the streamer (PORT 8052):
+
+- timestamp of pose
+
+- pose data (6DoF)
+
+- Field of View (in future)
+
+- IPD (in future)
