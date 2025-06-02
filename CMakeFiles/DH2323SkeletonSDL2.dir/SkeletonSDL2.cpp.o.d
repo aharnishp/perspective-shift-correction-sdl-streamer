@@ -1,5 +1,5 @@
 CMakeFiles/DH2323SkeletonSDL2.dir/SkeletonSDL2.cpp.o: \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/SkeletonSDL2.cpp \
+  /Users/aharnish/dev/VR/sdl-streamer/SkeletonSDL2.cpp \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/iostream \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__config_site \
@@ -780,77 +780,77 @@ CMakeFiles/DH2323SkeletonSDL2.dir/SkeletonSDL2.cpp.o: \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/__fwd/stack.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/print \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/unistd.h \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/glm.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/core/_fixes.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/glm.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/core/_fixes.hpp \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/cfloat \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/float.h \
   /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/16/include/float.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/float.h \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/core/setup.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/_detail.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/setup.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/core/setup.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/_detail.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/setup.hpp \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1/cassert \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/assert.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_assert.h \
   /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/_static_assert.h \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_half.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_half.inl \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_float.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_int.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_gentype.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_size.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_vec1.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_vec.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/_swizzle.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/_swizzle_func.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_vec1.inl \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_vec2.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_vec2.inl \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_vec3.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_vec3.inl \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_vec4.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_vec4.inl \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_mat2x2.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_mat.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_mat2x2.inl \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_mat2x3.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_mat2x3.inl \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_mat2x4.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_mat2x4.inl \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_mat3x2.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_mat3x2.inl \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_mat3x3.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_mat3x3.inl \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_mat3x4.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_mat3x4.inl \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_mat4x2.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_mat4x2.inl \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_mat4x3.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_mat4x3.inl \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_mat4x4.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/type_mat4x4.inl \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/func_trigonometric.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/func_trigonometric.inl \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/_vectorize.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/func_exponential.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/func_exponential.inl \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/func_common.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/_fixes.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/func_common.inl \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/func_packing.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/func_packing.inl \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/func_geometric.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/func_geometric.inl \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/func_matrix.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/func_matrix.inl \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/func_vector_relational.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/func_vector_relational.inl \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/func_integer.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/func_integer.inl \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/func_noise.hpp \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/glm/glm/./core/func_noise.inl \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/SDL2Auxiliary/SDL2auxiliary.h \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_half.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_half.inl \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_float.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_int.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_gentype.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_size.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_vec1.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_vec.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/_swizzle.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/_swizzle_func.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_vec1.inl \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_vec2.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_vec2.inl \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_vec3.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_vec3.inl \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_vec4.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_vec4.inl \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_mat2x2.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_mat.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_mat2x2.inl \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_mat2x3.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_mat2x3.inl \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_mat2x4.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_mat2x4.inl \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_mat3x2.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_mat3x2.inl \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_mat3x3.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_mat3x3.inl \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_mat3x4.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_mat3x4.inl \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_mat4x2.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_mat4x2.inl \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_mat4x3.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_mat4x3.inl \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_mat4x4.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/type_mat4x4.inl \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/func_trigonometric.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/func_trigonometric.inl \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/_vectorize.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/func_exponential.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/func_exponential.inl \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/func_common.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/_fixes.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/func_common.inl \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/func_packing.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/func_packing.inl \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/func_geometric.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/func_geometric.inl \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/func_matrix.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/func_matrix.inl \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/func_vector_relational.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/func_vector_relational.inl \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/func_integer.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/func_integer.inl \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/func_noise.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/func_noise.inl \
+  /Users/aharnish/dev/VR/sdl-streamer/SDL2Auxiliary/SDL2auxiliary.h \
   /opt/homebrew/include/SDL2/SDL.h /opt/homebrew/include/SDL2/SDL_main.h \
   /opt/homebrew/include/SDL2/SDL_stdinc.h \
   /opt/homebrew/include/SDL2/SDL_config.h \
@@ -910,4 +910,4 @@ CMakeFiles/DH2323SkeletonSDL2.dir/SkeletonSDL2.cpp.o: \
   /opt/homebrew/include/SDL2/SDL_version.h \
   /opt/homebrew/include/SDL2/SDL_locale.h \
   /opt/homebrew/include/SDL2/SDL_misc.h \
-  /Users/aharnish/KTH/DH2323\ Computer\ Graphics/lab3/DH2323Lab3/TestModel.h
+  /Users/aharnish/dev/VR/sdl-streamer/TestModel.h

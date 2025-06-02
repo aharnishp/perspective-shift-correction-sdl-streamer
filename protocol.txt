@@ -27,7 +27,22 @@ From the streamer to the receiver (Port 8051):
   * Inter-chunk delay: 100 microseconds (for multi-chunk frames)
 
 
-- depth data (16 bit) PNG data (0 is error/infinite/unknown, and otherwise in millimeters.)
+- Depth Buffer Data (streamed at ~30 FPS / every 33ms):
+  * Image Resolution: 500x500 pixels
+  * Format: 16-bit unsigned integers (little-endian)
+  * Values: Depth in millimeters (0 = error/infinite/unknown, 1-65535 = valid depth)
+  * Conversion: From 1/z depth buffer to world space distance * 1000
+  * Data size: 500,000 bytes per frame (500 x 500 x 2 bytes)
+  
+  UDP Packet Structure (same header as JPEG):
+  * Header (13 bytes, network byte order):
+    - frameId (4 bytes): uint32_t frame counter
+    - chunkIndex (4 bytes): uint32_t current chunk number (0-based)
+    - totalChunks (4 bytes): uint32_t total chunks for this frame
+    - dataType (1 byte): uint8_t (1 = raw 16-bit depth buffer)
+  
+  * Payload: Raw binary depth data (16-bit values, little-endian)
+  * Fragmentation: Large depth frames split across multiple packets
 
 
 

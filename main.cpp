@@ -83,6 +83,11 @@ const int HEADER_SIZE = sizeof(PacketHeader);
 const int MAX_CHUNK_DATA_SIZE = MAX_UDP_PACKET_SIZE - HEADER_SIZE;
 const float MY_PI = 3.141592653f;
 
+// Depth buffer configuration
+const float DEPTH_NEAR = 0.1f;    // Near clipping plane
+const float DEPTH_FAR = 100.0f;   // Far clipping plane
+const float DEPTH_SCALE = 1000.0f; // Convert to millimeters
+
 // === Global Variables ===
 ExtendedSDL2Aux *sdlAux;
 int t;
@@ -142,6 +147,29 @@ void extractRGBFromSDL(ExtendedSDL2Aux* sdlAux, std::vector<unsigned char>& rgb_
     sdlAux->extractRGBBuffer(rgb_buffer);
 }
 
+void convertDepthBufferTo16Bit(std::vector<uint16_t>& depth_16bit) {
+    depth_16bit.resize(SCREEN_WIDTH * SCREEN_HEIGHT);
+    
+    for (int y = 0; y < SCREEN_HEIGHT; ++y) {
+        for (int x = 0; x < SCREEN_WIDTH; ++x) {
+            int idx = y * SCREEN_WIDTH + x;
+            float zinv = depthBuffer[y][x];
+            
+            if (zinv <= 0.0f) {
+                // No depth or behind camera - set to 0 (error/infinite)
+                depth_16bit[idx] = 0;
+            } else {
+                // Convert from 1/z to actual depth distance
+                float depth_world = 1.0f / zinv;
+                
+                // Convert to millimeters and clamp to 16-bit range
+                uint32_t depth_mm = static_cast<uint32_t>(depth_world * DEPTH_SCALE);
+                depth_16bit[idx] = static_cast<uint16_t>(std::min(depth_mm, static_cast<uint32_t>(65535)));
+            }
+        }
+    }
+}
+
 bool initializeStreaming() {
     image_sender_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (image_sender_socket == INVALID_SOCKET) {
@@ -159,6 +187,50 @@ bool initializeStreaming() {
     }
 
     std::cout << "[Streamer] Ready to send to " << TARGET_IP << ":" << TARGET_PORT << std::endl;
+    return true;
+}
+
+bool sendDataPackets(const unsigned char* data, size_t data_size, uint8_t data_type) {
+    uint32_t total_chunks = (data_size + MAX_CHUNK_DATA_SIZE - 1) / MAX_CHUNK_DATA_SIZE;
+    if (total_chunks == 0 && data_size > 0) total_chunks = 1;
+
+    std::vector<unsigned char> packet_buffer(MAX_UDP_PACKET_SIZE);
+    PacketHeader* header = reinterpret_cast<PacketHeader*>(packet_buffer.data());
+    
+    header->frameId = htonl(frame_count);
+    header->totalChunks = htonl(total_chunks);
+    header->dataType = data_type; // 0 for JPEG, 1 for depth
+
+    size_t bytes_remaining = data_size;
+    const unsigned char* data_ptr = data;
+
+    for (uint32_t chunk_idx = 0; chunk_idx < total_chunks; chunk_idx++) {
+        header->chunkIndex = htonl(chunk_idx);
+
+        int current_chunk_data_size = std::min(static_cast<size_t>(MAX_CHUNK_DATA_SIZE), bytes_remaining);
+        
+        memcpy(packet_buffer.data() + HEADER_SIZE, data_ptr, current_chunk_data_size);
+        int packet_size = HEADER_SIZE + current_chunk_data_size;
+
+        int bytes_sent = sendto(image_sender_socket,
+            packet_buffer.data(),
+            packet_size,
+            0,
+            reinterpret_cast<const struct sockaddr*>(&receiver_addr),
+            sizeof(receiver_addr));
+
+        if (bytes_sent == SOCKET_ERROR) {
+            perror("sendto failed");
+            return false;
+        }
+
+        data_ptr += current_chunk_data_size;
+        bytes_remaining -= current_chunk_data_size;
+
+        if (total_chunks > 1 && chunk_idx < total_chunks - 1) {
+            std::this_thread::sleep_for(std::chrono::microseconds(100));
+        }
+    }
     return true;
 }
 
@@ -180,48 +252,20 @@ void streamFrame() {
         JPEG_QUALITY
     );
 
+    // Send color JPEG data
     if (jpeg_success && jpeg_buffer.data && jpeg_buffer.size > 0) {
-        // Fragment and send
-        uint32_t total_chunks = (jpeg_buffer.size + MAX_CHUNK_DATA_SIZE - 1) / MAX_CHUNK_DATA_SIZE;
-        if (total_chunks == 0 && jpeg_buffer.size > 0) total_chunks = 1;
+        sendDataPackets(jpeg_buffer.data, jpeg_buffer.size, 0); // 0 = JPEG color
+    }
 
-        std::vector<unsigned char> packet_buffer(MAX_UDP_PACKET_SIZE);
-        PacketHeader* header = reinterpret_cast<PacketHeader*>(packet_buffer.data());
-        
-        header->frameId = htonl(frame_count);
-        header->totalChunks = htonl(total_chunks);
-        header->dataType = 0; // JPEG
-
-        size_t bytes_remaining = jpeg_buffer.size;
-        const unsigned char* data_ptr = jpeg_buffer.data;
-
-        for (uint32_t chunk_idx = 0; chunk_idx < total_chunks; chunk_idx++) {
-            header->chunkIndex = htonl(chunk_idx);
-
-            int current_chunk_data_size = std::min(static_cast<size_t>(MAX_CHUNK_DATA_SIZE), bytes_remaining);
-            
-            memcpy(packet_buffer.data() + HEADER_SIZE, data_ptr, current_chunk_data_size);
-            int packet_size = HEADER_SIZE + current_chunk_data_size;
-
-            int bytes_sent = sendto(image_sender_socket,
-                packet_buffer.data(),
-                packet_size,
-                0,
-                reinterpret_cast<const struct sockaddr*>(&receiver_addr),
-                sizeof(receiver_addr));
-
-            if (bytes_sent == SOCKET_ERROR) {
-                perror("sendto failed");
-                break;
-            }
-
-            data_ptr += current_chunk_data_size;
-            bytes_remaining -= current_chunk_data_size;
-
-            if (total_chunks > 1 && chunk_idx < total_chunks - 1) {
-                std::this_thread::sleep_for(std::chrono::microseconds(100));
-            }
-        }
+    // Convert and send depth data
+    std::vector<uint16_t> depth_16bit;
+    convertDepthBufferTo16Bit(depth_16bit);
+    
+    // Send depth data as raw binary (16-bit values)
+    if (!depth_16bit.empty()) {
+        const unsigned char* depth_data = reinterpret_cast<const unsigned char*>(depth_16bit.data());
+        size_t depth_size = depth_16bit.size() * sizeof(uint16_t);
+        sendDataPackets(depth_data, depth_size, 1); // 1 = depth data
     }
 }
 
