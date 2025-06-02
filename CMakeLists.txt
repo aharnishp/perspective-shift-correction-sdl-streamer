@@ -30,3 +30,14 @@ add_executable(DH2323SkeletonSDL2
 target_link_libraries(DH2323SkeletonSDL2
   ${SDL2_LIBRARIES}
 )
+
+# Add new streamer target
+add_executable(VRStreamer
+  main.cpp
+  ExtendedSDL2Aux.cpp
+  ${CMAKE_SOURCE_DIR}/SDL2Auxiliary/SDL2Auxiliary.cpp
+)
+
+target_link_libraries(VRStreamer
+  ${SDL2_LIBRARIES}
+)

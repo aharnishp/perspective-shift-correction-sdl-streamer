@@ -1,4 +1,4 @@
-# Install script for directory: /Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3
+# Install script for directory: /Users/aharnish/dev/VR/sdl-streamer
 
 # Set the install prefix
 if(NOT DEFINED CMAKE_INSTALL_PREFIX)
@@ -40,7 +40,7 @@ endif()
 string(REPLACE ";" "\n" CMAKE_INSTALL_MANIFEST_CONTENT
        "${CMAKE_INSTALL_MANIFEST_FILES}")
 if(CMAKE_INSTALL_LOCAL_ONLY)
-  file(WRITE "/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3/install_local_manifest.txt"
+  file(WRITE "/Users/aharnish/dev/VR/sdl-streamer/install_local_manifest.txt"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")
 endif()
 if(CMAKE_INSTALL_COMPONENT)
@@ -56,6 +56,6 @@ else()
 endif()
 
 if(NOT CMAKE_INSTALL_LOCAL_ONLY)
-  file(WRITE "/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3/${CMAKE_INSTALL_MANIFEST}"
+  file(WRITE "/Users/aharnish/dev/VR/sdl-streamer/${CMAKE_INSTALL_MANIFEST}"
      "${CMAKE_INSTALL_MANIFEST_CONTENT}")
 endif()

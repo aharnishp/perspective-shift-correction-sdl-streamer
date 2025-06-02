@@ -57,10 +57,10 @@ RM = /opt/homebrew/bin/cmake -E rm -f
 EQUALS = =
 
 # The top-level source directory on which CMake was run.
-CMAKE_SOURCE_DIR = "/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3"
+CMAKE_SOURCE_DIR = /Users/aharnish/dev/VR/sdl-streamer
 
 # The top-level build directory on which CMake was run.
-CMAKE_BINARY_DIR = "/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3"
+CMAKE_BINARY_DIR = /Users/aharnish/dev/VR/sdl-streamer
 
 #=============================================================================
 # Targets provided globally by CMake.
@@ -87,9 +87,9 @@ rebuild_cache/fast: rebuild_cache
 
 # The main all target
 all: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3/CMakeFiles" "/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3//CMakeFiles/progress.marks"
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/aharnish/dev/VR/sdl-streamer/CMakeFiles /Users/aharnish/dev/VR/sdl-streamer//CMakeFiles/progress.marks
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 all
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3/CMakeFiles" 0
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/aharnish/dev/VR/sdl-streamer/CMakeFiles 0
 .PHONY : all
 
 # The main clean target
@@ -129,12 +129,50 @@ DH2323SkeletonSDL2/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/DH2323SkeletonSDL2.dir/build.make CMakeFiles/DH2323SkeletonSDL2.dir/build
 .PHONY : DH2323SkeletonSDL2/fast
 
+#=============================================================================
+# Target rules for targets named VRStreamer
+
+# Build rule for target.
+VRStreamer: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 VRStreamer
+.PHONY : VRStreamer
+
+# fast build rule for target.
+VRStreamer/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VRStreamer.dir/build.make CMakeFiles/VRStreamer.dir/build
+.PHONY : VRStreamer/fast
+
+ExtendedSDL2Aux.o: ExtendedSDL2Aux.cpp.o
+.PHONY : ExtendedSDL2Aux.o
+
+# target to build an object file
+ExtendedSDL2Aux.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VRStreamer.dir/build.make CMakeFiles/VRStreamer.dir/ExtendedSDL2Aux.cpp.o
+.PHONY : ExtendedSDL2Aux.cpp.o
+
+ExtendedSDL2Aux.i: ExtendedSDL2Aux.cpp.i
+.PHONY : ExtendedSDL2Aux.i
+
+# target to preprocess a source file
+ExtendedSDL2Aux.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VRStreamer.dir/build.make CMakeFiles/VRStreamer.dir/ExtendedSDL2Aux.cpp.i
+.PHONY : ExtendedSDL2Aux.cpp.i
+
+ExtendedSDL2Aux.s: ExtendedSDL2Aux.cpp.s
+.PHONY : ExtendedSDL2Aux.s
+
+# target to generate assembly for a file
+ExtendedSDL2Aux.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VRStreamer.dir/build.make CMakeFiles/VRStreamer.dir/ExtendedSDL2Aux.cpp.s
+.PHONY : ExtendedSDL2Aux.cpp.s
+
 SDL2Auxiliary/SDL2Auxiliary.o: SDL2Auxiliary/SDL2Auxiliary.cpp.o
 .PHONY : SDL2Auxiliary/SDL2Auxiliary.o
 
 # target to build an object file
 SDL2Auxiliary/SDL2Auxiliary.cpp.o:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/DH2323SkeletonSDL2.dir/build.make CMakeFiles/DH2323SkeletonSDL2.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.o
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VRStreamer.dir/build.make CMakeFiles/VRStreamer.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.o
 .PHONY : SDL2Auxiliary/SDL2Auxiliary.cpp.o
 
 SDL2Auxiliary/SDL2Auxiliary.i: SDL2Auxiliary/SDL2Auxiliary.cpp.i
@@ -143,6 +181,7 @@ SDL2Auxiliary/SDL2Auxiliary.i: SDL2Auxiliary/SDL2Auxiliary.cpp.i
 # target to preprocess a source file
 SDL2Auxiliary/SDL2Auxiliary.cpp.i:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/DH2323SkeletonSDL2.dir/build.make CMakeFiles/DH2323SkeletonSDL2.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.i
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VRStreamer.dir/build.make CMakeFiles/VRStreamer.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.i
 .PHONY : SDL2Auxiliary/SDL2Auxiliary.cpp.i
 
 SDL2Auxiliary/SDL2Auxiliary.s: SDL2Auxiliary/SDL2Auxiliary.cpp.s
@@ -151,6 +190,7 @@ SDL2Auxiliary/SDL2Auxiliary.s: SDL2Auxiliary/SDL2Auxiliary.cpp.s
 # target to generate assembly for a file
 SDL2Auxiliary/SDL2Auxiliary.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/DH2323SkeletonSDL2.dir/build.make CMakeFiles/DH2323SkeletonSDL2.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.s
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VRStreamer.dir/build.make CMakeFiles/VRStreamer.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.s
 .PHONY : SDL2Auxiliary/SDL2Auxiliary.cpp.s
 
 SkeletonSDL2.o: SkeletonSDL2.cpp.o
@@ -177,6 +217,30 @@ SkeletonSDL2.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/DH2323SkeletonSDL2.dir/build.make CMakeFiles/DH2323SkeletonSDL2.dir/SkeletonSDL2.cpp.s
 .PHONY : SkeletonSDL2.cpp.s
 
+main.o: main.cpp.o
+.PHONY : main.o
+
+# target to build an object file
+main.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VRStreamer.dir/build.make CMakeFiles/VRStreamer.dir/main.cpp.o
+.PHONY : main.cpp.o
+
+main.i: main.cpp.i
+.PHONY : main.i
+
+# target to preprocess a source file
+main.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VRStreamer.dir/build.make CMakeFiles/VRStreamer.dir/main.cpp.i
+.PHONY : main.cpp.i
+
+main.s: main.cpp.s
+.PHONY : main.s
+
+# target to generate assembly for a file
+main.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VRStreamer.dir/build.make CMakeFiles/VRStreamer.dir/main.cpp.s
+.PHONY : main.cpp.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -186,12 +250,19 @@ help:
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
 	@echo "... DH2323SkeletonSDL2"
+	@echo "... VRStreamer"
+	@echo "... ExtendedSDL2Aux.o"
+	@echo "... ExtendedSDL2Aux.i"
+	@echo "... ExtendedSDL2Aux.s"
 	@echo "... SDL2Auxiliary/SDL2Auxiliary.o"
 	@echo "... SDL2Auxiliary/SDL2Auxiliary.i"
 	@echo "... SDL2Auxiliary/SDL2Auxiliary.s"
 	@echo "... SkeletonSDL2.o"
 	@echo "... SkeletonSDL2.i"
 	@echo "... SkeletonSDL2.s"
+	@echo "... main.o"
+	@echo "... main.i"
+	@echo "... main.s"
 .PHONY : help
 
 

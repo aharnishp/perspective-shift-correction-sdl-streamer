@@ -1,3 +1,4 @@
-/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3/CMakeFiles/DH2323SkeletonSDL2.dir
-/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3/CMakeFiles/edit_cache.dir
-/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3/CMakeFiles/rebuild_cache.dir
+/Users/aharnish/dev/VR/sdl-streamer/CMakeFiles/DH2323SkeletonSDL2.dir
+/Users/aharnish/dev/VR/sdl-streamer/CMakeFiles/VRStreamer.dir
+/Users/aharnish/dev/VR/sdl-streamer/CMakeFiles/edit_cache.dir
+/Users/aharnish/dev/VR/sdl-streamer/CMakeFiles/rebuild_cache.dir

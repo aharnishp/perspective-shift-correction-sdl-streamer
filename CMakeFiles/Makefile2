@@ -54,20 +54,22 @@ RM = /opt/homebrew/bin/cmake -E rm -f
 EQUALS = =
 
 # The top-level source directory on which CMake was run.
-CMAKE_SOURCE_DIR = "/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3"
+CMAKE_SOURCE_DIR = /Users/aharnish/dev/VR/sdl-streamer
 
 # The top-level build directory on which CMake was run.
-CMAKE_BINARY_DIR = "/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3"
+CMAKE_BINARY_DIR = /Users/aharnish/dev/VR/sdl-streamer
 
 #=============================================================================
 # Directory level rules for the build root directory
 
 # The main recursive "all" target.
 all: CMakeFiles/DH2323SkeletonSDL2.dir/all
+all: CMakeFiles/VRStreamer.dir/all
 .PHONY : all
 
 # The main recursive "codegen" target.
 codegen: CMakeFiles/DH2323SkeletonSDL2.dir/codegen
+codegen: CMakeFiles/VRStreamer.dir/codegen
 .PHONY : codegen
 
 # The main recursive "preinstall" target.
@@ -76,6 +78,7 @@ preinstall:
 
 # The main recursive "clean" target.
 clean: CMakeFiles/DH2323SkeletonSDL2.dir/clean
+clean: CMakeFiles/VRStreamer.dir/clean
 .PHONY : clean
 
 #=============================================================================
@@ -85,14 +88,14 @@ clean: CMakeFiles/DH2323SkeletonSDL2.dir/clean
 CMakeFiles/DH2323SkeletonSDL2.dir/all:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/DH2323SkeletonSDL2.dir/build.make CMakeFiles/DH2323SkeletonSDL2.dir/depend
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/DH2323SkeletonSDL2.dir/build.make CMakeFiles/DH2323SkeletonSDL2.dir/build
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3/CMakeFiles" --progress-num=1,2,3 "Built target DH2323SkeletonSDL2"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/aharnish/dev/VR/sdl-streamer/CMakeFiles --progress-num=1,2,3 "Built target DH2323SkeletonSDL2"
 .PHONY : CMakeFiles/DH2323SkeletonSDL2.dir/all
 
 # Build rule for subdir invocation for target.
 CMakeFiles/DH2323SkeletonSDL2.dir/rule: cmake_check_build_system
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3/CMakeFiles" 3
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/aharnish/dev/VR/sdl-streamer/CMakeFiles 3
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/DH2323SkeletonSDL2.dir/all
-	$(CMAKE_COMMAND) -E cmake_progress_start "/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3/CMakeFiles" 0
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/aharnish/dev/VR/sdl-streamer/CMakeFiles 0
 .PHONY : CMakeFiles/DH2323SkeletonSDL2.dir/rule
 
 # Convenience name for target.
@@ -102,13 +105,45 @@ DH2323SkeletonSDL2: CMakeFiles/DH2323SkeletonSDL2.dir/rule
 # codegen rule for target.
 CMakeFiles/DH2323SkeletonSDL2.dir/codegen:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/DH2323SkeletonSDL2.dir/build.make CMakeFiles/DH2323SkeletonSDL2.dir/codegen
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir="/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3/CMakeFiles" --progress-num=1,2,3 "Finished codegen for target DH2323SkeletonSDL2"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/aharnish/dev/VR/sdl-streamer/CMakeFiles --progress-num=1,2,3 "Finished codegen for target DH2323SkeletonSDL2"
 .PHONY : CMakeFiles/DH2323SkeletonSDL2.dir/codegen
 
 # clean rule for target.
 CMakeFiles/DH2323SkeletonSDL2.dir/clean:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/DH2323SkeletonSDL2.dir/build.make CMakeFiles/DH2323SkeletonSDL2.dir/clean
 .PHONY : CMakeFiles/DH2323SkeletonSDL2.dir/clean
+
+#=============================================================================
+# Target rules for target CMakeFiles/VRStreamer.dir
+
+# All Build rule for target.
+CMakeFiles/VRStreamer.dir/all:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VRStreamer.dir/build.make CMakeFiles/VRStreamer.dir/depend
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VRStreamer.dir/build.make CMakeFiles/VRStreamer.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/aharnish/dev/VR/sdl-streamer/CMakeFiles --progress-num=4,5,6,7 "Built target VRStreamer"
+.PHONY : CMakeFiles/VRStreamer.dir/all
+
+# Build rule for subdir invocation for target.
+CMakeFiles/VRStreamer.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/aharnish/dev/VR/sdl-streamer/CMakeFiles 4
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 CMakeFiles/VRStreamer.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /Users/aharnish/dev/VR/sdl-streamer/CMakeFiles 0
+.PHONY : CMakeFiles/VRStreamer.dir/rule
+
+# Convenience name for target.
+VRStreamer: CMakeFiles/VRStreamer.dir/rule
+.PHONY : VRStreamer
+
+# codegen rule for target.
+CMakeFiles/VRStreamer.dir/codegen:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VRStreamer.dir/build.make CMakeFiles/VRStreamer.dir/codegen
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/Users/aharnish/dev/VR/sdl-streamer/CMakeFiles --progress-num=4,5,6,7 "Finished codegen for target VRStreamer"
+.PHONY : CMakeFiles/VRStreamer.dir/codegen
+
+# clean rule for target.
+CMakeFiles/VRStreamer.dir/clean:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/VRStreamer.dir/build.make CMakeFiles/VRStreamer.dir/clean
+.PHONY : CMakeFiles/VRStreamer.dir/clean
 
 #=============================================================================
 # Special targets to cleanup operation of make.

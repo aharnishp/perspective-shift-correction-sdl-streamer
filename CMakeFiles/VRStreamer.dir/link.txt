@@ -1,0 +1,1 @@
+/usr/bin/c++ -O2 -Wall -arch arm64 -Wl,-search_paths_first -Wl,-headerpad_max_install_names -L/opt/homebrew/opt/llvm/lib CMakeFiles/VRStreamer.dir/main.cpp.o CMakeFiles/VRStreamer.dir/ExtendedSDL2Aux.cpp.o CMakeFiles/VRStreamer.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.o -o VRStreamer  /opt/homebrew/lib/libSDL2.dylib -framework Cocoa /opt/homebrew/lib/libSDL2main.a

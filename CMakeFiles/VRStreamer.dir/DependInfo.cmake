@@ -8,8 +8,9 @@ set(CMAKE_DEPENDS_LANGUAGES
 
 # The set of dependency files which are needed:
 set(CMAKE_DEPENDS_DEPENDENCY_FILES
-  "/Users/aharnish/dev/VR/sdl-streamer/SDL2Auxiliary/SDL2Auxiliary.cpp" "CMakeFiles/DH2323SkeletonSDL2.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.o" "gcc" "CMakeFiles/DH2323SkeletonSDL2.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.o.d"
-  "/Users/aharnish/dev/VR/sdl-streamer/SkeletonSDL2.cpp" "CMakeFiles/DH2323SkeletonSDL2.dir/SkeletonSDL2.cpp.o" "gcc" "CMakeFiles/DH2323SkeletonSDL2.dir/SkeletonSDL2.cpp.o.d"
+  "/Users/aharnish/dev/VR/sdl-streamer/ExtendedSDL2Aux.cpp" "CMakeFiles/VRStreamer.dir/ExtendedSDL2Aux.cpp.o" "gcc" "CMakeFiles/VRStreamer.dir/ExtendedSDL2Aux.cpp.o.d"
+  "/Users/aharnish/dev/VR/sdl-streamer/SDL2Auxiliary/SDL2Auxiliary.cpp" "CMakeFiles/VRStreamer.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.o" "gcc" "CMakeFiles/VRStreamer.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.o.d"
+  "/Users/aharnish/dev/VR/sdl-streamer/main.cpp" "CMakeFiles/VRStreamer.dir/main.cpp.o" "gcc" "CMakeFiles/VRStreamer.dir/main.cpp.o.d"
   )
 
 # Targets to which this target links which contain Fortran sources.

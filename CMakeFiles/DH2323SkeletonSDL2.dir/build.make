@@ -53,10 +53,10 @@ RM = /opt/homebrew/bin/cmake -E rm -f
 EQUALS = =
 
 # The top-level source directory on which CMake was run.
-CMAKE_SOURCE_DIR = "/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3"
+CMAKE_SOURCE_DIR = /Users/aharnish/dev/VR/sdl-streamer
 
 # The top-level build directory on which CMake was run.
-CMAKE_BINARY_DIR = "/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3"
+CMAKE_BINARY_DIR = /Users/aharnish/dev/VR/sdl-streamer
 
 # Include any dependencies generated for this target.
 include CMakeFiles/DH2323SkeletonSDL2.dir/depend.make
@@ -75,30 +75,30 @@ CMakeFiles/DH2323SkeletonSDL2.dir/codegen:
 CMakeFiles/DH2323SkeletonSDL2.dir/SkeletonSDL2.cpp.o: CMakeFiles/DH2323SkeletonSDL2.dir/flags.make
 CMakeFiles/DH2323SkeletonSDL2.dir/SkeletonSDL2.cpp.o: SkeletonSDL2.cpp
 CMakeFiles/DH2323SkeletonSDL2.dir/SkeletonSDL2.cpp.o: CMakeFiles/DH2323SkeletonSDL2.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_1) "Building CXX object CMakeFiles/DH2323SkeletonSDL2.dir/SkeletonSDL2.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/DH2323SkeletonSDL2.dir/SkeletonSDL2.cpp.o -MF CMakeFiles/DH2323SkeletonSDL2.dir/SkeletonSDL2.cpp.o.d -o CMakeFiles/DH2323SkeletonSDL2.dir/SkeletonSDL2.cpp.o -c "/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3/SkeletonSDL2.cpp"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/aharnish/dev/VR/sdl-streamer/CMakeFiles --progress-num=$(CMAKE_PROGRESS_1) "Building CXX object CMakeFiles/DH2323SkeletonSDL2.dir/SkeletonSDL2.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/DH2323SkeletonSDL2.dir/SkeletonSDL2.cpp.o -MF CMakeFiles/DH2323SkeletonSDL2.dir/SkeletonSDL2.cpp.o.d -o CMakeFiles/DH2323SkeletonSDL2.dir/SkeletonSDL2.cpp.o -c /Users/aharnish/dev/VR/sdl-streamer/SkeletonSDL2.cpp
 
 CMakeFiles/DH2323SkeletonSDL2.dir/SkeletonSDL2.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/DH2323SkeletonSDL2.dir/SkeletonSDL2.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3/SkeletonSDL2.cpp" > CMakeFiles/DH2323SkeletonSDL2.dir/SkeletonSDL2.cpp.i
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/aharnish/dev/VR/sdl-streamer/SkeletonSDL2.cpp > CMakeFiles/DH2323SkeletonSDL2.dir/SkeletonSDL2.cpp.i
 
 CMakeFiles/DH2323SkeletonSDL2.dir/SkeletonSDL2.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/DH2323SkeletonSDL2.dir/SkeletonSDL2.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3/SkeletonSDL2.cpp" -o CMakeFiles/DH2323SkeletonSDL2.dir/SkeletonSDL2.cpp.s
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/aharnish/dev/VR/sdl-streamer/SkeletonSDL2.cpp -o CMakeFiles/DH2323SkeletonSDL2.dir/SkeletonSDL2.cpp.s
 
 CMakeFiles/DH2323SkeletonSDL2.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.o: CMakeFiles/DH2323SkeletonSDL2.dir/flags.make
 CMakeFiles/DH2323SkeletonSDL2.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.o: SDL2Auxiliary/SDL2Auxiliary.cpp
 CMakeFiles/DH2323SkeletonSDL2.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.o: CMakeFiles/DH2323SkeletonSDL2.dir/compiler_depend.ts
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir="/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_2) "Building CXX object CMakeFiles/DH2323SkeletonSDL2.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.o"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/DH2323SkeletonSDL2.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.o -MF CMakeFiles/DH2323SkeletonSDL2.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.o.d -o CMakeFiles/DH2323SkeletonSDL2.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.o -c "/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3/SDL2Auxiliary/SDL2Auxiliary.cpp"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --progress-dir=/Users/aharnish/dev/VR/sdl-streamer/CMakeFiles --progress-num=$(CMAKE_PROGRESS_2) "Building CXX object CMakeFiles/DH2323SkeletonSDL2.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.o"
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -MD -MT CMakeFiles/DH2323SkeletonSDL2.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.o -MF CMakeFiles/DH2323SkeletonSDL2.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.o.d -o CMakeFiles/DH2323SkeletonSDL2.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.o -c /Users/aharnish/dev/VR/sdl-streamer/SDL2Auxiliary/SDL2Auxiliary.cpp
 
 CMakeFiles/DH2323SkeletonSDL2.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.i: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Preprocessing CXX source to CMakeFiles/DH2323SkeletonSDL2.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.i"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E "/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3/SDL2Auxiliary/SDL2Auxiliary.cpp" > CMakeFiles/DH2323SkeletonSDL2.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.i
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -E /Users/aharnish/dev/VR/sdl-streamer/SDL2Auxiliary/SDL2Auxiliary.cpp > CMakeFiles/DH2323SkeletonSDL2.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.i
 
 CMakeFiles/DH2323SkeletonSDL2.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.s: cmake_force
 	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green "Compiling CXX source to assembly CMakeFiles/DH2323SkeletonSDL2.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.s"
-	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S "/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3/SDL2Auxiliary/SDL2Auxiliary.cpp" -o CMakeFiles/DH2323SkeletonSDL2.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.s
+	/usr/bin/c++ $(CXX_DEFINES) $(CXX_INCLUDES) $(CXX_FLAGS) -S /Users/aharnish/dev/VR/sdl-streamer/SDL2Auxiliary/SDL2Auxiliary.cpp -o CMakeFiles/DH2323SkeletonSDL2.dir/SDL2Auxiliary/SDL2Auxiliary.cpp.s
 
 # Object files for target DH2323SkeletonSDL2
 DH2323SkeletonSDL2_OBJECTS = \
@@ -114,7 +114,7 @@ DH2323SkeletonSDL2: CMakeFiles/DH2323SkeletonSDL2.dir/build.make
 DH2323SkeletonSDL2: /opt/homebrew/lib/libSDL2.dylib
 DH2323SkeletonSDL2: /opt/homebrew/lib/libSDL2main.a
 DH2323SkeletonSDL2: CMakeFiles/DH2323SkeletonSDL2.dir/link.txt
-	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir="/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3/CMakeFiles" --progress-num=$(CMAKE_PROGRESS_3) "Linking CXX executable DH2323SkeletonSDL2"
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --green --bold --progress-dir=/Users/aharnish/dev/VR/sdl-streamer/CMakeFiles --progress-num=$(CMAKE_PROGRESS_3) "Linking CXX executable DH2323SkeletonSDL2"
 	$(CMAKE_COMMAND) -E cmake_link_script CMakeFiles/DH2323SkeletonSDL2.dir/link.txt --verbose=$(VERBOSE)
 
 # Rule to build all files generated by this target.
@@ -126,6 +126,6 @@ CMakeFiles/DH2323SkeletonSDL2.dir/clean:
 .PHONY : CMakeFiles/DH2323SkeletonSDL2.dir/clean
 
 CMakeFiles/DH2323SkeletonSDL2.dir/depend:
-	cd "/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3" && $(CMAKE_COMMAND) -E cmake_depends "Unix Makefiles" "/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3" "/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3" "/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3" "/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3" "/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3/CMakeFiles/DH2323SkeletonSDL2.dir/DependInfo.cmake" "--color=$(COLOR)"
+	cd /Users/aharnish/dev/VR/sdl-streamer && $(CMAKE_COMMAND) -E cmake_depends "Unix Makefiles" /Users/aharnish/dev/VR/sdl-streamer /Users/aharnish/dev/VR/sdl-streamer /Users/aharnish/dev/VR/sdl-streamer /Users/aharnish/dev/VR/sdl-streamer /Users/aharnish/dev/VR/sdl-streamer/CMakeFiles/DH2323SkeletonSDL2.dir/DependInfo.cmake "--color=$(COLOR)"
 .PHONY : CMakeFiles/DH2323SkeletonSDL2.dir/depend
 

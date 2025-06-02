@@ -1,7 +1,7 @@
 {
 	"InstallScripts" : 
 	[
-		"/Users/aharnish/KTH/DH2323 Computer Graphics/lab3/DH2323Lab3/cmake_install.cmake"
+		"/Users/aharnish/dev/VR/sdl-streamer/cmake_install.cmake"
 	],
 	"Parallel" : false
 }
