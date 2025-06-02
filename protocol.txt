@@ -2,11 +2,30 @@ The Definition of the protocol used for UDP communication.
 
 From the streamer to the receiver (Port 8051):
 
-- captured timestamp
+- frame number (now change to have this first)
 
-- captured pose of camera
+- captured timestamp (now change to be here in the front)
 
-- color jpeg image data
+- captured pose of camera (now change to be the second and before image data)
+
+- Color JPEG Image Data (streamed at ~30 FPS / every 33ms):
+  * Image Resolution: 500x500 pixels
+  * Format: RGB24 (3 channels, 8 bits per channel)
+  * Compression: JPEG with quality level 75 (0-100 scale)
+  * Encoding: STB Image Write library (stbi_write_jpg_to_func)
+  
+  UDP Packet Structure (fragmented for large frames):
+  * Header (13 bytes, network byte order):
+    - frameId (4 bytes): uint32_t frame counter
+    - chunkIndex (4 bytes): uint32_t current chunk number (0-based)
+    - totalChunks (4 bytes): uint32_t total chunks for this frame
+    - dataType (1 byte): uint8_t (0 = JPEG color image, 1 = depth data)
+  
+  * Payload: JPEG compressed image data chunk
+  * Max UDP packet size: 1400 bytes
+  * Max payload per packet: 1387 bytes (1400 - 13 header bytes)
+  * Inter-chunk delay: 100 microseconds (for multi-chunk frames)
+
 
 - depth data (16 bit) PNG data (0 is error/infinite/unknown, and otherwise in millimeters.)
 
@@ -14,9 +33,18 @@ From the streamer to the receiver (Port 8051):
 
 From the VR receiver to the streamer (PORT 8052):
 
-- timestamp of pose
-
-- pose data (6DoF)
+- VR Head Pose Data (28 bytes total, sent at 10 Hz / every 100ms):
+  * Position (12 bytes): 3 x float32 (X, Y, Z in Unity world coordinates)
+  * Rotation (16 bytes): 4 x float32 (Quaternion X, Y, Z, W components)
+  
+  Binary format (little-endian):
+  Bytes 0-3:   Position.X (float32)
+  Bytes 4-7:   Position.Y (float32) 
+  Bytes 8-11:  Position.Z (float32)
+  Bytes 12-15: Rotation.X (float32)
+  Bytes 16-19: Rotation.Y (float32)
+  Bytes 20-23: Rotation.Z (float32)
+  Bytes 24-27: Rotation.W (float32)
 
 - Field of View (in future)
 
