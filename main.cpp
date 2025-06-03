@@ -74,7 +74,8 @@ struct Vertex {
 // === Configuration ===
 const int SCREEN_WIDTH = 500;
 const int SCREEN_HEIGHT = 500;
-const char* TARGET_IP = "127.0.0.1";
+const char* TARGET_IP = "192.168.31.144";
+// const char* TARGET_IP = "127.0.0.1";
 const unsigned short TARGET_PORT = 8051;
 const int JPEG_QUALITY = 75;
 const int SEND_INTERVAL_MS = 33; // ~30 FPS
