@@ -154,7 +154,9 @@ void convertDepthBufferTo16Bit(std::vector<uint16_t>& depth_16bit) {
     for (int y = 0; y < SCREEN_HEIGHT; ++y) {
         for (int x = 0; x < SCREEN_WIDTH; ++x) {
             int idx = y * SCREEN_WIDTH + x;
-            float zinv = depthBuffer[y][x];
+            // Invert Y coordinate to match color buffer orientation
+            int inverted_y = SCREEN_HEIGHT - 1 - y;
+            float zinv = depthBuffer[inverted_y][x];
             
             if (zinv <= 0.0f) {
                 // No depth or behind camera - set to 0 (error/infinite)
