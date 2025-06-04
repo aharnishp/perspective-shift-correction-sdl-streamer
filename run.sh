@@ -1,1 +1,1 @@
-make && ./DH2323SkeletonSDL2
+make && ./VRStreamer

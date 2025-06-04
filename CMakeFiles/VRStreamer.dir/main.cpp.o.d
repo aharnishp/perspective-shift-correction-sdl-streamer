@@ -1026,6 +1026,12 @@ CMakeFiles/VRStreamer.dir/main.cpp.o: \
   /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/func_integer.inl \
   /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/func_noise.hpp \
   /Users/aharnish/dev/VR/sdl-streamer/glm/glm/./core/func_noise.inl \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/gtc/quaternion.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/gtc/../glm.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/gtc/../gtc/half_float.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/gtc/../gtc/../glm.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/gtc/../gtc/half_float.inl \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/gtc/quaternion.inl \
   /Users/aharnish/dev/VR/sdl-streamer/ExtendedSDL2Aux.h \
   /Users/aharnish/dev/VR/sdl-streamer/SDL2Auxiliary/SDL2Auxiliary.h \
   /opt/homebrew/include/SDL2/SDL.h /opt/homebrew/include/SDL2/SDL_main.h \
@@ -1117,6 +1123,7 @@ CMakeFiles/VRStreamer.dir/main.cpp.o: \
   /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__thread/thread.h \
   /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/sstream \
   /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/__thread/this_thread.h \
+  /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1/iomanip \
   /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/socket.h \
   /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/constrained_ctypes.h \
   /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/machine/_param.h \
@@ -1134,4 +1141,6 @@ CMakeFiles/VRStreamer.dir/main.cpp.o: \
   /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/_select.h \
   /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/_types/_uuid_t.h \
   /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/gethostuuid.h \
+  /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/poll.h \
+  /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/poll.h \
   /Users/aharnish/dev/VR/sdl-streamer/stb_image_write.h

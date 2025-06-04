@@ -1,5 +1,6 @@
 #include <iostream>
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include "ExtendedSDL2Aux.h"
 #include "TestModel.h"
 #include <algorithm>
@@ -10,12 +11,15 @@
 #include <thread>
 #include <atomic>
 #include <cstdint>
+#include <mutex>
+#include <iomanip>
 
 // Networking includes
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <poll.h>
 
 // STB Image Write include
 #define STB_IMAGE_WRITE_IMPLEMENTATION
@@ -74,8 +78,8 @@ struct Vertex {
 // === Configuration ===
 const int SCREEN_WIDTH = 500;
 const int SCREEN_HEIGHT = 500;
-const char* TARGET_IP = "192.168.31.144";
-// const char* TARGET_IP = "127.0.0.1";
+// const char* TARGET_IP = "192.168.31.144";
+const char* TARGET_IP = "127.0.0.1";
 const unsigned short TARGET_PORT = 8051;
 const int JPEG_QUALITY = 75;
 const int SEND_INTERVAL_MS = 33; // ~30 FPS
@@ -116,6 +120,121 @@ vec3 currentTriangleNormal_world;
 SOCKET image_sender_socket;
 sockaddr_in receiver_addr;
 uint32_t frame_count = 0;
+
+// === Pose Receiving Structures and Variables ===
+struct Pose6DoF {
+    glm::vec3 position = glm::vec3(0.0f, 0.0f, 3.0f);
+    glm::quat rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f); // w, x, y, z
+};
+
+// Pose receiving configuration
+const unsigned short POSE_LISTEN_PORT = 8052;
+
+// Shared data for pose receiving
+Pose6DoF shared_pose;
+std::mutex pose_mutex;
+std::atomic<bool> pose_received(false);
+
+// Pose receiving variables
+SOCKET pose_receiver_socket;
+std::thread pose_receiver_thread;
+
+// === Pose Receiving Thread Function ===
+void pose_receiver_thread_func() {
+    std::cout << "[Pose Receiver] Thread starting..." << std::endl;
+    
+    // Create UDP socket for receiving pose data
+    pose_receiver_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (pose_receiver_socket == INVALID_SOCKET) {
+        std::cerr << "[Pose Receiver] Failed to create socket" << std::endl;
+        return;
+    }
+    
+    // Set up address for listening
+    sockaddr_in listen_addr;
+    memset(&listen_addr, 0, sizeof(listen_addr));
+    listen_addr.sin_family = AF_INET;
+    listen_addr.sin_addr.s_addr = INADDR_ANY;
+    listen_addr.sin_port = htons(POSE_LISTEN_PORT);
+    
+    // Bind socket to listen address
+    if (::bind(pose_receiver_socket, (struct sockaddr*)&listen_addr, sizeof(listen_addr)) == SOCKET_ERROR) {
+        std::cerr << "[Pose Receiver] Failed to bind to port " << POSE_LISTEN_PORT << std::endl;
+        closesocket(pose_receiver_socket);
+        return;
+    }
+    
+    std::cout << "[Pose Receiver] Listening on port " << POSE_LISTEN_PORT << std::endl;
+    
+    // Set up for non-blocking receive with timeout
+    pollfd poll_fd;
+    poll_fd.fd = pose_receiver_socket;
+    poll_fd.events = POLLIN;
+    
+    const int TIMEOUT_MS = 1000; // 1 second timeout
+    char buffer[28]; // Pose data is 28 bytes: 3 floats for position + 4 floats for quaternion
+    
+    while (keep_running) {
+        // Check for incoming data with timeout
+        int poll_result = poll(&poll_fd, 1, TIMEOUT_MS);
+        
+        if (poll_result > 0 && (poll_fd.revents & POLLIN)) {
+            sockaddr_in sender_addr;
+            socklen_t sender_len = sizeof(sender_addr);
+            
+            // Receive pose data
+            ssize_t bytes_received = recvfrom(pose_receiver_socket, buffer, sizeof(buffer), 0, 
+                                              (struct sockaddr*)&sender_addr, &sender_len);
+            
+            if (bytes_received == 28) { // Expected size for pose data
+                // Parse pose data (little-endian floats)
+                float* float_data = reinterpret_cast<float*>(buffer);
+                
+                Pose6DoF new_pose;
+                new_pose.position.x = float_data[0]; // Unity X
+                new_pose.position.y = float_data[1]; // Unity Y  
+                new_pose.position.z = float_data[2]; // Unity Z
+                new_pose.rotation.x = float_data[3]; // Quaternion X
+                new_pose.rotation.y = float_data[4]; // Quaternion Y
+                new_pose.rotation.z = float_data[5]; // Quaternion Z
+                new_pose.rotation.w = float_data[6]; // Quaternion W
+                
+                // Update shared pose data thread-safely
+                {
+                    std::lock_guard<std::mutex> lock(pose_mutex);
+                    shared_pose = new_pose;
+                    pose_received = true;
+                }
+                
+                // Log received pose
+                std::cout << "[Pose Receiver] Received pose - Position: ("
+                          << std::fixed << std::setprecision(3)
+                          << new_pose.position.x << ", "
+                          << new_pose.position.y << ", "
+                          << new_pose.position.z << ") Rotation: ("
+                          << new_pose.rotation.x << ", "
+                          << new_pose.rotation.y << ", "
+                          << new_pose.rotation.z << ", "
+                          << new_pose.rotation.w << ")" << std::endl;
+                          
+            } else if (bytes_received > 0) {
+                std::cerr << "[Pose Receiver] Received unexpected data size: " << bytes_received << " bytes (expected 28)" << std::endl;
+            }
+        } else if (poll_result == 0) {
+            // Timeout - continue loop
+            continue;
+        } else {
+            // Error
+            if (keep_running) {
+                std::cerr << "[Pose Receiver] Poll error" << std::endl;
+            }
+            break;
+        }
+    }
+    
+    std::cout << "[Pose Receiver] Thread shutting down..." << std::endl;
+    closesocket(pose_receiver_socket);
+}
 
 // === Streaming Functions ===
 void write_memory_buffer(void* context, void* data, int size) {
@@ -618,11 +737,36 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
+    // Start pose receiving thread
+    std::cout << "[VR Renderer-Streamer] Starting pose receiver thread..." << std::endl;
+    pose_receiver_thread = std::thread(pose_receiver_thread_func);
+
     auto last_stream_time = std::chrono::high_resolution_clock::now();
 
     while (!sdlAux->quitEvent() && keep_running) {
         // Update scene
         Update();
+        
+        // Check for received pose data and log it
+        if (pose_received.load()) {
+            std::lock_guard<std::mutex> lock(pose_mutex);
+            if (pose_received.load()) {
+                std::cout << "[Main Loop] Current VR Pose - Position: ("
+                          << std::fixed << std::setprecision(3)
+                          << shared_pose.position.x << ", "
+                          << shared_pose.position.y << ", "
+                          << shared_pose.position.z << ") Rotation: ("
+                          << shared_pose.rotation.x << ", "
+                          << shared_pose.rotation.y << ", "
+                          << shared_pose.rotation.z << ", "
+                          << shared_pose.rotation.w << ")" << std::endl;
+                
+                // Optionally, you could apply the pose to the camera here
+                // cameraPos = shared_pose.position;
+                // Convert quaternion to rotation matrix if needed
+                pose_received = false; // Reset flag to avoid spam
+            }
+        }
         
         // Render frame
         Draw();
@@ -642,6 +786,17 @@ int main(int argc, char* argv[]) {
 
     // Cleanup
     std::cout << "[VR Renderer-Streamer] Shutting down..." << std::endl;
+    
+    // Signal threads to stop
+    keep_running = false;
+    
+    // Wait for pose receiver thread to finish
+    if (pose_receiver_thread.joinable()) {
+        std::cout << "[VR Renderer-Streamer] Waiting for pose receiver thread to finish..." << std::endl;
+        pose_receiver_thread.join();
+    }
+    
+    // Clean up resources
     sdlAux->saveBMP("screenshot.bmp");
     delete sdlAux;
     closesocket(image_sender_socket);
