@@ -76,8 +76,8 @@ struct Vertex {
 };
 
 // === Configuration ===
-const int SCREEN_WIDTH = 500;
-const int SCREEN_HEIGHT = 500;
+const int SCREEN_WIDTH = 1000;
+const int SCREEN_HEIGHT = 1000;
 const char* TARGET_IP = "192.168.31.144";
 // const char* TARGET_IP = "127.0.0.1";
 const unsigned short TARGET_PORT = 8051;
@@ -89,9 +89,9 @@ const int MAX_CHUNK_DATA_SIZE = MAX_UDP_PACKET_SIZE - HEADER_SIZE;
 const float MY_PI = 3.141592653f;
 
 // Depth buffer configuration
-const float DEPTH_NEAR = 0.1f;    // Near clipping plane
-const float DEPTH_FAR = 100.0f;   // Far clipping plane
-const float DEPTH_SCALE = 1000.0f; // Convert to millimeters
+const float DEPTH_NEAR = 0.1f;          // Near clipping plane
+const float DEPTH_FAR = 100.0f;         // Far clipping plane
+const float DEPTH_SCALE = 1000.0f;      // Convert to millimeters
 
 // === Global Variables ===
 ExtendedSDL2Aux *sdlAux;
@@ -105,7 +105,7 @@ vec3 cameraPos(0, 0, -3.001);
 mat3 R;
 float yaw = 0.0f;
 float pitch = 0.0f;
-float focal = (SCREEN_HEIGHT + SCREEN_WIDTH) * (0.5f);
+float focal = (SCREEN_HEIGHT + SCREEN_WIDTH) * (0.1f);
 
 // === 6DoF Camera Control System ===
 // Manual control state
@@ -118,7 +118,20 @@ std::chrono::steady_clock::time_point last_mouse_movement;
 // Base pose from VR tracking
 vec3 base_position(0, 0, -3.001);
 glm::quat base_rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
-bool use_tracking_pose = false;
+bool use_tracking_pose = true;
+
+// Depth buffer control
+bool invert_depth_map = false;
+
+// VR rotation inversion toggles (global settings for tracked mode)
+bool invert_pitch = true;  // X-axis rotation
+bool invert_yaw = false;    // Y-axis rotation  
+bool invert_roll = false;   // Z-axis rotation
+
+// VR translation inversion toggles (global settings for tracked mode)
+bool invert_pos_x = false;  // X-axis translation
+bool invert_pos_y = true;  // Y-axis translation
+bool invert_pos_z = true;  // Z-axis translation
 
 // Lighting
 vec3 lightPos(0, -0.5, -0.7);
@@ -306,7 +319,14 @@ void convertDepthBufferTo16Bit(std::vector<uint16_t>& depth_16bit) {
                 
                 // Convert to millimeters and clamp to 16-bit range
                 uint32_t depth_mm = static_cast<uint32_t>(depth_world * DEPTH_SCALE);
-                depth_16bit[idx] = static_cast<uint16_t>(std::min(depth_mm, static_cast<uint32_t>(65535)));
+                uint16_t depth_value = static_cast<uint16_t>(std::min(depth_mm, static_cast<uint32_t>(65535)));
+                
+                // Apply depth inversion if enabled
+                if (invert_depth_map) {
+                    depth_16bit[idx] = 65535 - depth_value;
+                } else {
+                    depth_16bit[idx] = depth_value;
+                }
             }
         }
     }
@@ -449,6 +469,49 @@ mat3 createRotationMatrix(float yaw, float pitch) {
     return R_pitch * R_yaw;
 }
 
+// Helper function to apply rotation axis inversions to a quaternion
+glm::quat applyRotationInversions(const glm::quat& quat) {
+    glm::quat result = quat;
+    
+    // Apply inversions by negating specific quaternion components
+    // This approach avoids Euler angle conversion and works directly with quaternions
+    if (invert_pitch) {
+        // Invert pitch by negating X component (around X-axis)
+        result.x = -result.x;
+    }
+    if (invert_yaw) {
+        // Invert yaw by negating Y component (around Y-axis)
+        result.y = -result.y;
+    }
+    if (invert_roll) {
+        // Invert roll by negating Z component (around Z-axis)
+        result.z = -result.z;
+    }
+    
+    return result;
+}
+
+// Helper function to apply translation axis inversions to a position vector
+vec3 applyPositionInversions(const vec3& position) {
+    vec3 result = position;
+    
+    // Apply inversions by negating specific position components
+    if (invert_pos_x) {
+        // Invert X-axis translation
+        result.x = -result.x;
+    }
+    if (invert_pos_y) {
+        // Invert Y-axis translation
+        result.y = -result.y;
+    }
+    if (invert_pos_z) {
+        // Invert Z-axis translation
+        result.z = -result.z;
+    }
+    
+    return result;
+}
+
 void updateCameraPose() {
     if (use_tracking_pose && pose_received.load()) {
         // Get latest pose data
@@ -461,12 +524,19 @@ void updateCameraPose() {
         // Convert Unity coordinates to our coordinate system
         // Unity: Y-up, Z-forward, X-right (left-handed)
         // Our system: Y-up, Z-backward, X-right (right-handed)
-        base_position = vec3(current_pose.position.x, current_pose.position.y, -current_pose.position.z);
+        vec3 unity_position = vec3(current_pose.position.x, current_pose.position.y, -current_pose.position.z);
+        
+        // Apply translation axis inversions if enabled
+        base_position = applyPositionInversions(unity_position);
         
         // Convert quaternion to rotation matrix
         // Note: May need to adjust quaternion components for coordinate system differences
         glm::quat adjusted_quat = glm::quat(current_pose.rotation.w, current_pose.rotation.x, current_pose.rotation.y, -current_pose.rotation.z);
-        mat3 base_rotation_matrix = quaternionToRotationMatrix(adjusted_quat);
+        
+        // Apply rotation axis inversions if enabled
+        glm::quat inverted_quat = applyRotationInversions(adjusted_quat);
+        
+        mat3 base_rotation_matrix = quaternionToRotationMatrix(inverted_quat);
         
         // Apply manual control offset if active
         if (manual_control_active) {
@@ -530,6 +600,58 @@ void Update(void) {
         }
     }
     t_key_was_pressed = keystate[SDL_SCANCODE_T];
+    
+    // Toggle depth map inversion with I key
+    static bool i_key_was_pressed = false;
+    if (keystate[SDL_SCANCODE_I] && !i_key_was_pressed) {
+        invert_depth_map = !invert_depth_map;
+        std::cout << "[Depth] Depth map inversion: " << (invert_depth_map ? "ON" : "OFF") << std::endl;
+    }
+    i_key_was_pressed = keystate[SDL_SCANCODE_I];
+    
+    // Toggle VR rotation inversion with X, Y, Z keys (for pitch, yaw, roll)
+    static bool x_key_was_pressed = false;
+    if (keystate[SDL_SCANCODE_X] && !x_key_was_pressed) {
+        invert_pitch = !invert_pitch;
+        std::cout << "[VR Rotation] Pitch (X-axis) inversion: " << (invert_pitch ? "ON" : "OFF") << std::endl;
+    }
+    x_key_was_pressed = keystate[SDL_SCANCODE_X];
+    
+    static bool y_key_was_pressed = false;
+    if (keystate[SDL_SCANCODE_Y] && !y_key_was_pressed) {
+        invert_yaw = !invert_yaw;
+        std::cout << "[VR Rotation] Yaw (Y-axis) inversion: " << (invert_yaw ? "ON" : "OFF") << std::endl;
+    }
+    y_key_was_pressed = keystate[SDL_SCANCODE_Y];
+    
+    static bool z_key_was_pressed = false;
+    if (keystate[SDL_SCANCODE_Z] && !z_key_was_pressed) {
+        invert_roll = !invert_roll;
+        std::cout << "[VR Rotation] Roll (Z-axis) inversion: " << (invert_roll ? "ON" : "OFF") << std::endl;
+    }
+    z_key_was_pressed = keystate[SDL_SCANCODE_Z];
+    
+    // Toggle VR position inversion with Q, E, R keys (for X, Y, Z position)
+    static bool q_key_was_pressed = false;
+    if (keystate[SDL_SCANCODE_Q] && !q_key_was_pressed) {
+        invert_pos_x = !invert_pos_x;
+        std::cout << "[VR Position] X-axis inversion: " << (invert_pos_x ? "ON" : "OFF") << std::endl;
+    }
+    q_key_was_pressed = keystate[SDL_SCANCODE_Q];
+    
+    static bool e_key_was_pressed = false;
+    if (keystate[SDL_SCANCODE_E] && !e_key_was_pressed) {
+        invert_pos_y = !invert_pos_y;
+        std::cout << "[VR Position] Y-axis inversion: " << (invert_pos_y ? "ON" : "OFF") << std::endl;
+    }
+    e_key_was_pressed = keystate[SDL_SCANCODE_E];
+    
+    static bool r_key_was_pressed = false;
+    if (keystate[SDL_SCANCODE_R] && !r_key_was_pressed) {
+        invert_pos_z = !invert_pos_z;
+        std::cout << "[VR Position] Z-axis inversion: " << (invert_pos_z ? "ON" : "OFF") << std::endl;
+    }
+    r_key_was_pressed = keystate[SDL_SCANCODE_R];
     
     // Handle input based on mode
     if (use_tracking_pose) {
