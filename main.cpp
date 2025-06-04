@@ -78,8 +78,8 @@ struct Vertex {
 // === Configuration ===
 const int SCREEN_WIDTH = 500;
 const int SCREEN_HEIGHT = 500;
-// const char* TARGET_IP = "192.168.31.144";
-const char* TARGET_IP = "127.0.0.1";
+const char* TARGET_IP = "192.168.31.144";
+// const char* TARGET_IP = "127.0.0.1";
 const unsigned short TARGET_PORT = 8051;
 const int JPEG_QUALITY = 75;
 const int SEND_INTERVAL_MS = 33; // ~30 FPS
@@ -106,6 +106,19 @@ mat3 R;
 float yaw = 0.0f;
 float pitch = 0.0f;
 float focal = (SCREEN_HEIGHT + SCREEN_WIDTH) * (0.5f);
+
+// === 6DoF Camera Control System ===
+// Manual control state
+bool manual_control_active = false;
+float manual_yaw = 0.0f;
+float manual_pitch = 0.0f;
+vec3 manual_position_offset(0.0f);
+std::chrono::steady_clock::time_point last_mouse_movement;
+
+// Base pose from VR tracking
+vec3 base_position(0, 0, -3.001);
+glm::quat base_rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+bool use_tracking_pose = false;
 
 // Lighting
 vec3 lightPos(0, -0.5, -0.7);
@@ -398,6 +411,85 @@ void streamFrame() {
     }
 }
 
+// === 6DoF Camera Helper Functions ===
+mat3 quaternionToRotationMatrix(const glm::quat& q) {
+    // Convert quaternion to rotation matrix
+    // Unity uses left-handed coordinates, we may need to adjust
+    float x = q.x, y = q.y, z = q.z, w = q.w;
+    
+    mat3 result;
+    result[0][0] = 1.0f - 2.0f * (y*y + z*z);
+    result[0][1] = 2.0f * (x*y - w*z);
+    result[0][2] = 2.0f * (x*z + w*y);
+    
+    result[1][0] = 2.0f * (x*y + w*z);
+    result[1][1] = 1.0f - 2.0f * (x*x + z*z);
+    result[1][2] = 2.0f * (y*z - w*x);
+    
+    result[2][0] = 2.0f * (x*z - w*y);
+    result[2][1] = 2.0f * (y*z + w*x);
+    result[2][2] = 1.0f - 2.0f * (x*x + y*y);
+    
+    return result;
+}
+
+mat3 createRotationMatrix(float yaw, float pitch) {
+    mat3 R_yaw = glm::mat3(
+        glm::vec3(cos(yaw), 0.0f, sin(yaw)),
+        glm::vec3(0.0f, 1.0f, 0.0f),
+        glm::vec3(-sin(yaw), 0.0f, cos(yaw))
+    );
+
+    mat3 R_pitch = glm::mat3(
+        glm::vec3(1.0f, 0.0f, 0.0f),
+        glm::vec3(0.0f, cos(pitch), -sin(pitch)),
+        glm::vec3(0.0f, sin(pitch), cos(pitch))
+    );
+    
+    return R_pitch * R_yaw;
+}
+
+void updateCameraPose() {
+    if (use_tracking_pose && pose_received.load()) {
+        // Get latest pose data
+        Pose6DoF current_pose;
+        {
+            std::lock_guard<std::mutex> lock(pose_mutex);
+            current_pose = shared_pose;
+        }
+        
+        // Convert Unity coordinates to our coordinate system
+        // Unity: Y-up, Z-forward, X-right (left-handed)
+        // Our system: Y-up, Z-backward, X-right (right-handed)
+        base_position = vec3(current_pose.position.x, current_pose.position.y, -current_pose.position.z);
+        
+        // Convert quaternion to rotation matrix
+        // Note: May need to adjust quaternion components for coordinate system differences
+        glm::quat adjusted_quat = glm::quat(current_pose.rotation.w, current_pose.rotation.x, current_pose.rotation.y, -current_pose.rotation.z);
+        mat3 base_rotation_matrix = quaternionToRotationMatrix(adjusted_quat);
+        
+        // Apply manual control offset if active
+        if (manual_control_active) {
+            // Create manual rotation matrix
+            mat3 manual_rotation = createRotationMatrix(manual_yaw, manual_pitch);
+            
+            // Combine rotations: apply manual rotation after base rotation
+            R = manual_rotation * base_rotation_matrix;
+            
+            // Apply manual position offset in world space
+            cameraPos = base_position + manual_position_offset;
+        } else {
+            // Use pure tracking data
+            R = base_rotation_matrix;
+            cameraPos = base_position;
+        }
+    } else {
+        // Fallback to manual control only (original behavior)
+        R = createRotationMatrix(yaw, pitch);
+        // cameraPos updated in Update() function
+    }
+}
+
 // === Renderer Functions ===
 void Update(void);
 void Draw(void);
@@ -416,34 +508,103 @@ void Update(void) {
 
     int dx, dy;
     SDL_GetRelativeMouseState(&dx, &dy);
-    if (true) {
-        if (dx != 0) {
-            yaw -= dx * -0.005f;
-        }
-        if (dy != 0) {
-            pitch -= dy * 0.005f;
-            const float pitchLimit = MY_PI / 2.0f - 0.01f;
-            pitch = glm::clamp(pitch, -pitchLimit, pitchLimit);
+    
+    const Uint8* keystate = SDL_GetKeyboardState(NULL);
+    
+    // Check if user is providing manual input
+    bool mouse_input = (dx != 0 || dy != 0);
+    bool keyboard_input = (keystate[SDL_SCANCODE_W] || keystate[SDL_SCANCODE_S] || 
+                          keystate[SDL_SCANCODE_A] || keystate[SDL_SCANCODE_D] || 
+                          keystate[SDL_SCANCODE_SPACE] || keystate[SDL_SCANCODE_LCTRL]);
+    
+    // Toggle tracking mode with T key
+    static bool t_key_was_pressed = false;
+    if (keystate[SDL_SCANCODE_T] && !t_key_was_pressed) {
+        use_tracking_pose = !use_tracking_pose;
+        std::cout << "[Camera] Tracking mode: " << (use_tracking_pose ? "ON" : "OFF") << std::endl;
+        if (!use_tracking_pose) {
+            // Reset manual offsets when disabling tracking
+            manual_yaw = yaw;
+            manual_pitch = pitch;
+            manual_position_offset = vec3(0.0f);
         }
     }
+    t_key_was_pressed = keystate[SDL_SCANCODE_T];
+    
+    // Handle input based on mode
+    if (use_tracking_pose) {
+        // When using tracking, manual input creates offsets
+        if (mouse_input || keyboard_input) {
+            manual_control_active = true;
+            last_mouse_movement = std::chrono::steady_clock::now();
+            
+            // Apply mouse input to manual rotation offset
+            if (mouse_input) {
+                if (dx != 0) {
+                    manual_yaw -= dx * -0.005f;
+                }
+                if (dy != 0) {
+                    manual_pitch -= dy * 0.005f;
+                    const float pitchLimit = MY_PI / 2.0f - 0.01f;
+                    manual_pitch = glm::clamp(manual_pitch, -pitchLimit, pitchLimit);
+                }
+            }
+            
+            // Apply keyboard input to manual position offset
+            float moveSpeed = 0.005f * dt;
+            
+            // Calculate movement directions based on current combined rotation
+            mat3 current_rotation = R; // Use current camera rotation
+            mat3 cameraToWorld = glm::transpose(current_rotation);
+            vec3 forward_world = cameraToWorld * vec3(0,0,-1);
+            vec3 right_world = cameraToWorld * vec3(1,0,0);
+            
+            if (keystate[SDL_SCANCODE_W]) manual_position_offset -= forward_world * moveSpeed;
+            if (keystate[SDL_SCANCODE_S]) manual_position_offset += forward_world * moveSpeed;
+            if (keystate[SDL_SCANCODE_A]) manual_position_offset -= right_world * moveSpeed;
+            if (keystate[SDL_SCANCODE_D]) manual_position_offset += right_world * moveSpeed;
+            if (keystate[SDL_SCANCODE_SPACE]) manual_position_offset.y += moveSpeed;
+            if (keystate[SDL_SCANCODE_LCTRL]) manual_position_offset.y -= moveSpeed;
+        } else {
+            // Check if enough time has passed to disable manual control
+            auto now = std::chrono::steady_clock::now();
+            auto time_since_input = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_mouse_movement).count();
+            if (time_since_input > 2000) { // 2 seconds timeout
+                manual_control_active = false;
+                manual_yaw = 0.0f;
+                manual_pitch = 0.0f;
+                manual_position_offset = vec3(0.0f);
+            }
+        }
+    } else {
+        // Original manual control mode
+        manual_control_active = false;
+        
+        if (mouse_input) {
+            if (dx != 0) {
+                yaw -= dx * -0.005f;
+            }
+            if (dy != 0) {
+                pitch -= dy * 0.005f;
+                const float pitchLimit = MY_PI / 2.0f - 0.01f;
+                pitch = glm::clamp(pitch, -pitchLimit, pitchLimit);
+            }
+        }
+        
+        float moveSpeed = 0.005f * dt;
+        mat3 cameraToWorld = glm::transpose(R);
+        vec3 forward_world = cameraToWorld * vec3(0,0,-1);
+        vec3 right_world = cameraToWorld * vec3(1,0,0);
 
-    const Uint8* keystate = SDL_GetKeyboardState(NULL);
-    float moveSpeed = 0.005f * dt;
+        if (keystate[SDL_SCANCODE_W]) cameraPos -= forward_world * moveSpeed;
+        if (keystate[SDL_SCANCODE_S]) cameraPos += forward_world * moveSpeed;
+        if (keystate[SDL_SCANCODE_A]) cameraPos -= right_world * moveSpeed;
+        if (keystate[SDL_SCANCODE_D]) cameraPos += right_world * moveSpeed;
+        if (keystate[SDL_SCANCODE_SPACE]) cameraPos.y += moveSpeed;
+        if (keystate[SDL_SCANCODE_LCTRL]) cameraPos.y -= moveSpeed;
+    }
 
-    mat3 cameraToWorld = glm::transpose(R);
-    vec3 forward_cam_local = vec3(0,0,-1);
-    vec3 right_cam_local = vec3(1,0,0);
-
-    vec3 forward_world = cameraToWorld * forward_cam_local;
-    vec3 right_world = cameraToWorld * right_cam_local;
-
-    if (keystate[SDL_SCANCODE_W]) cameraPos -= forward_world * moveSpeed;
-    if (keystate[SDL_SCANCODE_S]) cameraPos += forward_world * moveSpeed;
-    if (keystate[SDL_SCANCODE_A]) cameraPos -= right_world * moveSpeed;
-    if (keystate[SDL_SCANCODE_D]) cameraPos += right_world * moveSpeed;
-    if (keystate[SDL_SCANCODE_SPACE]) cameraPos.y += moveSpeed;
-    if (keystate[SDL_SCANCODE_LCTRL]) cameraPos.y -= moveSpeed;
-
+    // Light control (unchanged)
     float lightMoveSpeed = 0.005f * dt;
     if (keystate[SDL_SCANCODE_UP]) lightPos.z += lightMoveSpeed;
     if (keystate[SDL_SCANCODE_DOWN]) lightPos.z -= lightMoveSpeed;
@@ -452,18 +613,8 @@ void Update(void) {
     if (keystate[SDL_SCANCODE_PAGEUP]) lightPos.y += lightMoveSpeed;
     if (keystate[SDL_SCANCODE_PAGEDOWN]) lightPos.y -= lightMoveSpeed;
 
-    mat3 R_yaw = glm::mat3(
-        glm::vec3(cos(yaw), 0.0f, sin(yaw)),
-        glm::vec3(0.0f, 1.0f, 0.0f),
-        glm::vec3(-sin(yaw), 0.0f, cos(yaw))
-    );
-
-    mat3 R_pitch = glm::mat3(
-        glm::vec3(1.0f, 0.0f, 0.0f),
-        glm::vec3(0.0f, cos(pitch), -sin(pitch)),
-        glm::vec3(0.0f, sin(pitch), cos(pitch))
-    );
-    R = R_pitch * R_yaw;
+    // Update camera pose based on current mode
+    updateCameraPose();
 }
 
 void VertexShaderPixel(const Vertex& v_in, Pixel& p_out) {
@@ -751,29 +902,8 @@ int main(int argc, char* argv[]) {
     auto last_stream_time = std::chrono::high_resolution_clock::now();
 
     while (!sdlAux->quitEvent() && keep_running) {
-        // Update scene
+        // Update scene (this now handles pose-driven camera)
         Update();
-        
-        // Check for received pose data and log it
-        if (pose_received.load()) {
-            std::lock_guard<std::mutex> lock(pose_mutex);
-            if (pose_received.load()) {
-                std::cout << "[Main Loop] Current VR Pose - Position: ("
-                          << std::fixed << std::setprecision(3)
-                          << shared_pose.position.x << ", "
-                          << shared_pose.position.y << ", "
-                          << shared_pose.position.z << ") Rotation: ("
-                          << shared_pose.rotation.x << ", "
-                          << shared_pose.rotation.y << ", "
-                          << shared_pose.rotation.z << ", "
-                          << shared_pose.rotation.w << ")" << std::endl;
-                
-                // Optionally, you could apply the pose to the camera here
-                // cameraPos = shared_pose.position;
-                // Convert quaternion to rotation matrix if needed
-                pose_received = false; // Reset flag to avoid spam
-            }
-        }
         
         // Render frame
         Draw();
