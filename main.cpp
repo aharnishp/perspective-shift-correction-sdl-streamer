@@ -219,6 +219,13 @@ void pose_receiver_thread_func() {
                           
             } else if (bytes_received > 0) {
                 std::cerr << "[Pose Receiver] Received unexpected data size: " << bytes_received << " bytes (expected 28)" << std::endl;
+                
+                // Debug: Print the received bytes in hex format
+                std::cout << "[Pose Receiver Debug] Received bytes: ";
+                for (ssize_t i = 0; i < std::min(bytes_received, static_cast<ssize_t>(16)); i++) {
+                    std::cout << std::hex << std::setw(2) << std::setfill('0') << (unsigned char)buffer[i] << " ";
+                }
+                std::cout << std::dec << std::endl;
             }
         } else if (poll_result == 0) {
             // Timeout - continue loop
