@@ -88,8 +88,8 @@ struct Vertex {
 };
 
 // === Configuration ===
-const int SCREEN_WIDTH = 1000;
-const int SCREEN_HEIGHT = 1000;
+const int SCREEN_WIDTH = 1500;
+const int SCREEN_HEIGHT = 1500;
 const char* TARGET_IP = "192.168.31.144";
 // const char* TARGET_IP = "127.0.0.1";
 const unsigned short TARGET_PORT = 8051;
@@ -141,6 +141,17 @@ bool has_world_pose = false;
 
 // Depth buffer control
 bool invert_depth_map = false;
+
+
+// // VR rotation inversion toggles (global settings for tracked mode)
+// bool invert_pitch = false;  // X-axis rotation
+// bool invert_yaw = false;    // Y-axis rotation  
+// bool invert_roll = false;   // Z-axis rotation
+
+// // VR translation inversion toggles (global settings for tracked mode)
+// bool invert_pos_x = false;  // X-axis translation
+// bool invert_pos_y = false;  // Y-axis translation
+// bool invert_pos_z = false;  // Z-axis translation
 
 // VR rotation inversion toggles (global settings for tracked mode)
 bool invert_pitch = true;  // X-axis rotation
@@ -661,11 +672,14 @@ void updateCameraPose() {
 void Update(void);
 void Draw(void);
 void VertexShaderPixel(const Vertex& v_in, Pixel& p_out);
+void VertexShaderPixelUnclamped(const Vertex& v_in, Pixel& p_out);
 void InterpolatePixel(Pixel a, Pixel b, vector<Pixel>& result);
-void ComputePolygonRowsPixel(const vector<Pixel>& vertexPixels, vector<Pixel>& leftPixels, vector<Pixel>& rightPixels, int& minHeight, int& maxHeight);
+void ComputePolygonRowsPixel(const vector<Pixel>& vertexPixels, vector<Pixel>& leftPixels, vector<Pixel>& rightPixels, int& polygonMinY, int& polygonMaxY);
 void DrawLineHorizontalDepth(const Pixel& start, const Pixel& end);
 void DrawRowsPixel(const vector<Pixel>& leftPixels, const vector<Pixel>& rightPixels, int polygonMinY, int polygonMaxY);
 void DrawPolygonPixel(const vector<Vertex>& vertices);
+vector<Vertex> ClipTriangleToScreen(const vector<Vertex>& vertices);
+bool LineIntersectScreen(const Vertex& p1, const Vertex& p2, float& t, int edge);
 void PixelShader(const Pixel& p);
 
 void Update(void) {
@@ -853,6 +867,27 @@ void VertexShaderPixel(const Vertex& v_in, Pixel& p_out) {
     p_out.pos_world_times_zinv = v_in.position * p_out.zinv;
 }
 
+void VertexShaderPixelUnclamped(const Vertex& v_in, Pixel& p_out) {
+    vec3 position_camera_space = R * (v_in.position - cameraPos);
+
+    if (position_camera_space.z < 0.001f) {
+        p_out.x = -1;
+        p_out.y = -1;
+        p_out.zinv = 0;
+        p_out.pos_world_times_zinv = vec3(0.0f);
+        return;
+    }
+
+    p_out.zinv = 1.0f / position_camera_space.z;
+    // Don't round here - keep floating point precision for clipping
+    float screen_x = focal * position_camera_space.x * p_out.zinv + SCREEN_WIDTH / 2.0f;
+    float screen_y = focal * position_camera_space.y * p_out.zinv + SCREEN_HEIGHT / 2.0f;
+    
+    p_out.x = static_cast<int>(screen_x);
+    p_out.y = static_cast<int>(screen_y);
+    p_out.pos_world_times_zinv = v_in.position * p_out.zinv;
+}
+
 void InterpolatePixel(Pixel a, Pixel b, vector<Pixel>& result) {
     int N = result.size();
     if (N == 0) return;
@@ -890,80 +925,119 @@ void InterpolatePixel(Pixel a, Pixel b, vector<Pixel>& result) {
     }
 }
 
-void ComputePolygonRowsPixel(const vector<Pixel>& vertexPixels, vector<Pixel>& leftPixels, vector<Pixel>& rightPixels, int& polygonMinY, int& polygonMaxY) {
-    polygonMinY = SCREEN_HEIGHT;
-    polygonMaxY = 0;
-
-    int validVertices = 0;
-    for (const auto& p : vertexPixels) {
-        if (p.x == -1 && p.y == -1) continue;
-        polygonMinY = std::min(polygonMinY, p.y);
-        polygonMaxY = std::max(polygonMaxY, p.y);
-        validVertices++;
+bool LineIntersectScreen(const Vertex& p1, const Vertex& p2, float& t, int edge) {
+    // Transform vertices to screen space for clipping
+    Pixel pixel1, pixel2;
+    VertexShaderPixelUnclamped(p1, pixel1);
+    VertexShaderPixelUnclamped(p2, pixel2);
+    
+    // If either vertex is behind camera, skip this edge
+    if ((pixel1.x == -1 && pixel1.y == -1) || (pixel2.x == -1 && pixel2.y == -1)) {
+        return false;
     }
-    if (validVertices < 3) {
-        polygonMinY = SCREEN_HEIGHT;
-        polygonMaxY = 0;
-        return;
+    
+    float x1 = pixel1.x, y1 = pixel1.y;
+    float x2 = pixel2.x, y2 = pixel2.y;
+    
+    // Check intersection with screen boundaries
+    // edge: 0=left(x=0), 1=right(x=SCREEN_WIDTH-1), 2=top(y=0), 3=bottom(y=SCREEN_HEIGHT-1)
+    switch(edge) {
+        case 0: // Left edge (x = 0)
+            if ((x1 < 0) == (x2 < 0)) return false; // Both on same side
+            t = (0 - x1) / (x2 - x1);
+            break;
+        case 1: // Right edge (x = SCREEN_WIDTH-1)
+            if ((x1 >= SCREEN_WIDTH) == (x2 >= SCREEN_WIDTH)) return false;
+            t = (SCREEN_WIDTH - 1 - x1) / (x2 - x1);
+            break;
+        case 2: // Top edge (y = 0)
+            if ((y1 < 0) == (y2 < 0)) return false;
+            t = (0 - y1) / (y2 - y1);
+            break;
+        case 3: // Bottom edge (y = SCREEN_HEIGHT-1)
+            if ((y1 >= SCREEN_HEIGHT) == (y2 >= SCREEN_HEIGHT)) return false;
+            t = (SCREEN_HEIGHT - 1 - y1) / (y2 - y1);
+            break;
+        default:
+            return false;
     }
+    
+    return t >= 0.0f && t <= 1.0f;
+}
 
-    polygonMinY = std::max(0, polygonMinY);
-    polygonMaxY = std::min(SCREEN_HEIGHT - 1, polygonMaxY);
-
-    if (polygonMinY > polygonMaxY) return;
-
-    for (int y = polygonMinY; y <= polygonMaxY; ++y) {
-        leftPixels[y].x = SCREEN_WIDTH;
-        leftPixels[y].y = y;
-        leftPixels[y].zinv = 0.f;
-        leftPixels[y].pos_world_times_zinv = vec3(0.f);
-
-        rightPixels[y].x = 0;
-        rightPixels[y].y = y;
-        rightPixels[y].zinv = 0.f;
-        rightPixels[y].pos_world_times_zinv = vec3(0.f);
-    }
-
-    for (size_t i = 0; i < vertexPixels.size(); ++i) {
-        Pixel p1_orig = vertexPixels[i];
-        Pixel p2_orig = vertexPixels[(i + 1) % vertexPixels.size()];
-
-        if ((p1_orig.x == -1 && p1_orig.y == -1) || (p2_orig.x == -1 && p2_orig.y == -1)) continue;
-
-        Pixel p1 = p1_orig;
-        Pixel p2 = p2_orig;
-
-        if (p1.y > p2.y) {
-            std::swap(p1, p2);
+vector<Vertex> ClipTriangleToScreen(const vector<Vertex>& vertices) {
+    if (vertices.size() < 3) return vertices;
+    
+    vector<Vertex> clipped = vertices;
+    
+    // Sutherland-Hodgman clipping algorithm
+    // Clip against each edge of the screen rectangle
+    for (int edge = 0; edge < 4; ++edge) {
+        if (clipped.empty()) break;
+        
+        vector<Vertex> input = clipped;
+        clipped.clear();
+        
+        if (input.empty()) continue;
+        
+        Vertex prevVertex = input.back();
+        Pixel prevPixel;
+        VertexShaderPixelUnclamped(prevVertex, prevPixel);
+        bool prevInside = (prevPixel.x != -1 && prevPixel.y != -1) &&
+                         (prevPixel.x >= 0 && prevPixel.x < SCREEN_WIDTH &&
+                          prevPixel.y >= 0 && prevPixel.y < SCREEN_HEIGHT);
+        
+        // Override inside check for specific edge
+        switch(edge) {
+            case 0: prevInside = prevPixel.x >= 0; break;
+            case 1: prevInside = prevPixel.x < SCREEN_WIDTH; break;
+            case 2: prevInside = prevPixel.y >= 0; break;
+            case 3: prevInside = prevPixel.y < SCREEN_HEIGHT; break;
         }
-
-        if (p1.y == p2.y) continue;
-
-        int startY_edge = std::max(p1.y, polygonMinY);
-        int endY_edge = std::min(p2.y, polygonMaxY);
-
-        if (startY_edge > endY_edge) continue;
-
-        int dy_edge_full = p2.y - p1.y;
-        if (dy_edge_full == 0) continue;
-
-        vector<Pixel> edgeScanlinePixels(dy_edge_full + 1);
-        InterpolatePixel(p1, p2, edgeScanlinePixels);
-
-        for(int current_y_on_edge = 0; current_y_on_edge < edgeScanlinePixels.size(); ++current_y_on_edge) {
-            const auto& edgePixel = edgeScanlinePixels[current_y_on_edge];
-            int y = edgePixel.y;
-
-            if (y >= polygonMinY && y <= polygonMaxY) {
-                if (edgePixel.x < leftPixels[y].x) {
-                    leftPixels[y] = edgePixel;
+        
+        for (const Vertex& currentVertex : input) {
+            Pixel currentPixel;
+            VertexShaderPixelUnclamped(currentVertex, currentPixel);
+            bool currentInside = (currentPixel.x != -1 && currentPixel.y != -1) &&
+                               (currentPixel.x >= 0 && currentPixel.x < SCREEN_WIDTH &&
+                                currentPixel.y >= 0 && currentPixel.y < SCREEN_HEIGHT);
+            
+            // Override inside check for specific edge
+            switch(edge) {
+                case 0: currentInside = currentPixel.x >= 0; break;
+                case 1: currentInside = currentPixel.x < SCREEN_WIDTH; break;
+                case 2: currentInside = currentPixel.y >= 0; break;
+                case 3: currentInside = currentPixel.y < SCREEN_HEIGHT; break;
+            }
+            
+            if (currentInside) {
+                if (!prevInside) {
+                    // Entering: add intersection point
+                    float t;
+                    if (LineIntersectScreen(prevVertex, currentVertex, t, edge)) {
+                        Vertex intersection;
+                        intersection.position = prevVertex.position + t * (currentVertex.position - prevVertex.position);
+                        clipped.push_back(intersection);
+                    }
                 }
-                if (edgePixel.x > rightPixels[y].x) {
-                    rightPixels[y] = edgePixel;
+                // Add current vertex
+                clipped.push_back(currentVertex);
+            } else if (prevInside) {
+                // Exiting: add intersection point
+                float t;
+                if (LineIntersectScreen(prevVertex, currentVertex, t, edge)) {
+                    Vertex intersection;
+                    intersection.position = prevVertex.position + t * (currentVertex.position - prevVertex.position);
+                    clipped.push_back(intersection);
                 }
             }
+            
+            prevVertex = currentVertex;
+            prevInside = currentInside;
         }
     }
+    
+    return clipped;
 }
 
 void DrawLineHorizontalDepth(const Pixel& startNode, const Pixel& endNode) {
@@ -1015,14 +1089,25 @@ void DrawPolygonPixel(const vector<Vertex>& vertices) {
     int V = vertices.size();
     if (V < 3) return;
 
+    // Convert vertices to pixels without aggressive culling
     vector<Pixel> vertexPixels(V);
-    bool any_valid_vertex = false;
-    fori(i, V) {
+    int valid_vertices_count = 0;
+    int behind_camera_count = 0;
+    
+    for (size_t i = 0; i < vertices.size(); ++i) {
         VertexShaderPixel(vertices[i], vertexPixels[i]);
-        if(vertexPixels[i].x != -1) any_valid_vertex = true;
+        if (vertexPixels[i].x == -1 && vertexPixels[i].y == -1) {
+            behind_camera_count++;
+        } else {
+            valid_vertices_count++;
+        }
     }
 
-    if(!any_valid_vertex) return;
+    // Only cull if ALL vertices are behind the camera
+    if (behind_camera_count == V) return;
+    
+    // Disable screen bounds culling - allow all triangles with at least one vertex in front of camera
+    // This ensures triangles are not culled when any vertex is out of screen bounds
 
     vector<Pixel> leftPixels(SCREEN_HEIGHT);
     vector<Pixel> rightPixels(SCREEN_HEIGHT);
@@ -1033,6 +1118,109 @@ void DrawPolygonPixel(const vector<Vertex>& vertices) {
     
     if (polygonMinY <= polygonMaxY) {
        DrawRowsPixel(leftPixels, rightPixels, polygonMinY, polygonMaxY);
+    }
+}
+
+void ComputePolygonRowsPixel(const vector<Pixel>& vertexPixels, vector<Pixel>& leftPixels, vector<Pixel>& rightPixels, int& polygonMinY, int& polygonMaxY) {
+    polygonMinY = SCREEN_HEIGHT;
+    polygonMaxY = 0;
+
+    // Handle Y range calculation for vertices that might be far outside screen
+    int validVertices = 0;
+    for (const auto& p : vertexPixels) {
+        if (p.x == -1 && p.y == -1) continue;
+        
+        // Allow much wider Y range to handle triangles extending beyond screen
+        int clamped_y = std::max(-SCREEN_HEIGHT, std::min(2 * SCREEN_HEIGHT, p.y));
+        polygonMinY = std::min(polygonMinY, clamped_y);
+        polygonMaxY = std::max(polygonMaxY, clamped_y);
+        validVertices++;
+    }
+    if (validVertices < 1) { // Allow triangles with at least 1 valid vertex
+        polygonMinY = SCREEN_HEIGHT;
+        polygonMaxY = 0;
+        return;
+    }
+
+    // Clamp to actual screen bounds for rendering
+    polygonMinY = std::max(0, polygonMinY);
+    polygonMaxY = std::min(SCREEN_HEIGHT - 1, polygonMaxY);
+
+    if (polygonMinY > polygonMaxY) return;
+
+    for (int y = polygonMinY; y <= polygonMaxY; ++y) {
+        leftPixels[y].x = SCREEN_WIDTH;
+        leftPixels[y].y = y;
+        leftPixels[y].zinv = 0.f;
+        leftPixels[y].pos_world_times_zinv = vec3(0.f);
+
+        rightPixels[y].x = 0;
+        rightPixels[y].y = y;
+        rightPixels[y].zinv = 0.f;
+        rightPixels[y].pos_world_times_zinv = vec3(0.f);
+    }
+
+    for (size_t i = 0; i < vertexPixels.size(); ++i) {
+        Pixel p1_orig = vertexPixels[i];
+        Pixel p2_orig = vertexPixels[(i + 1) % vertexPixels.size()];
+
+        // Skip edges where both vertices are behind camera
+        if ((p1_orig.x == -1 && p1_orig.y == -1) && (p2_orig.x == -1 && p2_orig.y == -1)) continue;
+        
+        // If one vertex is behind camera, clamp it to screen edge (simple approach)
+        Pixel p1 = p1_orig;
+        Pixel p2 = p2_orig;
+        
+        // Handle vertices behind camera by clamping to reasonable screen bounds
+        if (p1.x == -1 && p1.y == -1) {
+            // Clamp to extended screen bounds instead of center
+            p1.x = glm::clamp(SCREEN_WIDTH / 2, -SCREEN_WIDTH, 2 * SCREEN_WIDTH);
+            p1.y = glm::clamp(SCREEN_HEIGHT / 2, -SCREEN_HEIGHT, 2 * SCREEN_HEIGHT);
+            p1.zinv = 0.001f; // Small depth value
+        }
+        if (p2.x == -1 && p2.y == -1) {
+            // Clamp to extended screen bounds instead of center
+            p2.x = glm::clamp(SCREEN_WIDTH / 2, -SCREEN_WIDTH, 2 * SCREEN_WIDTH);
+            p2.y = glm::clamp(SCREEN_HEIGHT / 2, -SCREEN_HEIGHT, 2 * SCREEN_HEIGHT);
+            p2.zinv = 0.001f; // Small depth value
+        }
+
+        // Clamp extreme coordinates to prevent interpolation issues
+        p1.x = glm::clamp(p1.x, -SCREEN_WIDTH * 2, SCREEN_WIDTH * 3);
+        p1.y = glm::clamp(p1.y, -SCREEN_HEIGHT * 2, SCREEN_HEIGHT * 3);
+        p2.x = glm::clamp(p2.x, -SCREEN_WIDTH * 2, SCREEN_WIDTH * 3);
+        p2.y = glm::clamp(p2.y, -SCREEN_HEIGHT * 2, SCREEN_HEIGHT * 3);
+
+        if (p1.y > p2.y) {
+            std::swap(p1, p2);
+        }
+
+        if (p1.y == p2.y) continue;
+
+        int startY_edge = std::max(p1.y, polygonMinY);
+        int endY_edge = std::min(p2.y, polygonMaxY);
+
+        if (startY_edge > endY_edge) continue;
+
+        int dy_edge_full = p2.y - p1.y;
+        if (dy_edge_full == 0) continue;
+
+        vector<Pixel> edgeScanlinePixels(dy_edge_full + 1);
+        InterpolatePixel(p1, p2, edgeScanlinePixels);
+
+        for(int current_y_on_edge = 0; current_y_on_edge < edgeScanlinePixels.size(); ++current_y_on_edge) {
+            const auto& edgePixel = edgeScanlinePixels[current_y_on_edge];
+            int y = edgePixel.y;
+
+            if (y >= polygonMinY && y <= polygonMaxY) {
+                if (edgePixel.x < leftPixels[y].x) {
+                    leftPixels[y] = edgePixel;
+                }
+                if (edgePixel.x > rightPixels[y].x) {
+                    rightPixels[y] = edgePixel;
+                }
+            }
+        }
     }
 }
 
