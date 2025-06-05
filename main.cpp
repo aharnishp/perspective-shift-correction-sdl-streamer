@@ -141,7 +141,7 @@ bool has_world_pose = false;
 
 // Depth buffer control
 bool invert_depth_map = false;
-
+bool display_depth_buffer = false;  // New flag to display depth buffer instead of color
 
 // // VR rotation inversion toggles (global settings for tracked mode)
 // bool invert_pitch = false;  // X-axis rotation
@@ -345,16 +345,26 @@ void convertDepthBufferTo16Bit(std::vector<uint16_t>& depth_16bit) {
             int inverted_y = SCREEN_HEIGHT - 1 - y;
             float zinv = depthBuffer[inverted_y][x];
             
+            // Check for sky/background pixels (zinv == 0 means no geometry was rendered there)
             if (zinv <= 0.0f) {
-                // No depth or behind camera - set to 0 (error/infinite)
-                depth_16bit[idx] = 0;
+                // Sky/infinite depth - set to 0 to indicate infinite distance
+                depth_16bit[idx] = UINT16_MAX;
+                // depth_16bit[idx] = 0;
             } else {
                 // Convert from 1/z to actual depth distance
                 float depth_world = 1.0f / zinv;
                 
+                // Clamp depth to reasonable range before scaling
+                depth_world = glm::clamp(depth_world, DEPTH_NEAR, DEPTH_FAR);
+                
                 // Convert to millimeters and clamp to 16-bit range
                 uint32_t depth_mm = static_cast<uint32_t>(depth_world * DEPTH_SCALE);
                 uint16_t depth_value = static_cast<uint16_t>(std::min(depth_mm, static_cast<uint32_t>(65535)));
+                
+                // Ensure we don't accidentally use 0 for actual geometry (reserve 0 for infinite)
+                if (depth_value == 0) {
+                    depth_value = 1; // Minimum non-infinite depth value
+                }
                 
                 // Apply depth inversion if enabled
                 if (invert_depth_map) {
@@ -511,6 +521,12 @@ void streamFrame() {
     std::vector<unsigned char> rgb_buffer;
     extractRGBFromSDL(sdlAux, rgb_buffer);
     
+    // Debug: Print RGB buffer info
+    if (frame_count % 30 == 1) { // Print every 30 frames
+        std::cout << "[Stream Debug] RGB buffer size: " << rgb_buffer.size() 
+                  << " bytes (expected: " << (SCREEN_WIDTH * SCREEN_HEIGHT * 3) << ")" << std::endl;
+    }
+    
     // Encode as JPEG
     MemoryBuffer jpeg_buffer;
     int jpeg_success = stbi_write_jpg_to_func(
@@ -524,18 +540,67 @@ void streamFrame() {
 
     // Send color JPEG data
     if (jpeg_success && jpeg_buffer.data && jpeg_buffer.size > 0) {
+        if (frame_count % 30 == 1) {
+            std::cout << "[Stream Debug] JPEG encoded size: " << jpeg_buffer.size << " bytes" << std::endl;
+        }
         sendDataPackets(jpeg_buffer.data, jpeg_buffer.size, 0); // 0 = JPEG color
+    } else {
+        std::cerr << "[Stream Error] Failed to encode JPEG" << std::endl;
     }
 
     // Convert and send depth data
     std::vector<uint16_t> depth_16bit;
     convertDepthBufferTo16Bit(depth_16bit);
     
+    // Debug: Print depth buffer info and sample values with detailed analysis
+    if (frame_count % 30 == 1) {
+        std::cout << "[Stream Debug] Depth buffer size: " << depth_16bit.size() 
+                  << " values (" << (depth_16bit.size() * sizeof(uint16_t)) << " bytes)" << std::endl;
+        
+        // Sample some depth values for debugging with more detail
+        uint32_t zero_count = 0;
+        uint32_t non_zero_count = 0;
+        uint32_t min_depth = 65535, max_depth = 0;
+        uint32_t depth_histogram[10] = {0}; // 10 bins for depth distribution
+        
+        for (size_t i = 0; i < depth_16bit.size(); i++) {
+            uint16_t depth_val = depth_16bit[i];
+            if (depth_val == 0) {
+                zero_count++;
+            } else {
+                non_zero_count++;
+                min_depth = std::min(min_depth, static_cast<uint32_t>(depth_val));
+                max_depth = std::max(max_depth, static_cast<uint32_t>(depth_val));
+                
+                // Add to histogram
+                int bin = std::min(9, static_cast<int>(depth_val / 6553)); // 0-65535 divided into 10 bins
+                depth_histogram[bin]++;
+            }
+        }
+        
+        std::cout << "[Stream Debug] Depth analysis:" << std::endl;
+        std::cout << "  Zero pixels (sky): " << zero_count << " (" << (zero_count * 100 / depth_16bit.size()) << "%)" << std::endl;
+        std::cout << "  Non-zero pixels: " << non_zero_count << " (" << (non_zero_count * 100 / depth_16bit.size()) << "%)" << std::endl;
+        if (non_zero_count > 0) {
+            std::cout << "  Depth range: " << min_depth << " - " << max_depth << " mm" << std::endl;
+            std::cout << "  World depth range: " << (min_depth / DEPTH_SCALE) << " - " << (max_depth / DEPTH_SCALE) << " units" << std::endl;
+            
+            // Print histogram
+            std::cout << "  Depth distribution (bins): ";
+            for (int i = 0; i < 10; i++) {
+                std::cout << depth_histogram[i] << " ";
+            }
+            std::cout << std::endl;
+        }
+    }
+    
     // Send depth data as raw binary (16-bit values)
     if (!depth_16bit.empty()) {
         const unsigned char* depth_data = reinterpret_cast<const unsigned char*>(depth_16bit.data());
         size_t depth_size = depth_16bit.size() * sizeof(uint16_t);
         sendDataPackets(depth_data, depth_size, 1); // 1 = depth data
+    } else {
+        std::cerr << "[Stream Error] Depth buffer is empty" << std::endl;
     }
 }
 
@@ -719,6 +784,14 @@ void Update(void) {
         std::cout << "[Depth] Depth map inversion: " << (invert_depth_map ? "ON" : "OFF") << std::endl;
     }
     i_key_was_pressed = keystate[SDL_SCANCODE_I];
+    
+    // Toggle depth buffer display with V key
+    static bool v_key_was_pressed = false;
+    if (keystate[SDL_SCANCODE_V] && !v_key_was_pressed) {
+        display_depth_buffer = !display_depth_buffer;
+        std::cout << "[Display] Depth buffer visualization: " << (display_depth_buffer ? "ON" : "OFF") << std::endl;
+    }
+    v_key_was_pressed = keystate[SDL_SCANCODE_V];
     
     // Toggle VR rotation inversion with X, Y, Z keys (for pitch, yaw, roll)
     static bool x_key_was_pressed = false;
@@ -1243,43 +1316,84 @@ void PixelShader(const Pixel& p) {
             actual_pixel_world_pos = p.pos_world_times_zinv / p.zinv;
         }
 
-        vec3 s = lightPos - actual_pixel_world_pos;
-        float dist_sq = glm::dot(s, s);
+        vec3 final_color;
+        if (display_depth_buffer) {
+            // Display depth buffer as grayscale
+            float depth_world = 1.0f / p.zinv;
+            
+            // Normalize depth to [0,1] range for visualization
+            // Use a smaller max depth for better contrast
+            float max_depth_for_viz = 20.0f; // 20 units instead of DEPTH_FAR
+            float normalized_depth = glm::clamp(depth_world / max_depth_for_viz, 0.0f, 1.0f);
+            
+            // Apply inversion if enabled
+            if (invert_depth_map) {
+                normalized_depth = 1.0f - normalized_depth;
+            }
+            
+            // Convert to grayscale with better contrast
+            // Close objects = white, far objects = black
+            float gray_value = 1.0f - normalized_depth;
+            
+            // Add some color coding for better visibility
+            if (gray_value < 0.3f) {
+                // Very far objects - blue tint
+                final_color = vec3(gray_value * 0.5f, gray_value * 0.5f, gray_value + 0.3f);
+            } else if (gray_value > 0.8f) {
+                // Very close objects - red tint  
+                final_color = vec3(gray_value + 0.2f, gray_value * 0.5f, gray_value * 0.5f);
+            } else {
+                // Medium depth - pure grayscale
+                final_color = vec3(gray_value, gray_value, gray_value);
+            }
+            
+        } else {
+            // Normal color rendering
+            vec3 s = lightPos - actual_pixel_world_pos;
+            float dist_sq = glm::dot(s, s);
 
-        vec3 illumination_direct(0.0f);
+            vec3 illumination_direct(0.0f);
 
-        if (dist_sq > 1e-5f) {
-            vec3 s_normalized = glm::normalize(s);
-            float cos_theta = glm::max(0.0f, glm::dot(currentTriangleNormal_world, s_normalized));
-            illumination_direct = (lightPower * cos_theta) / (4.0f * MY_PI * dist_sq);
+            if (dist_sq > 1e-5f) {
+                vec3 s_normalized = glm::normalize(s);
+                float cos_theta = glm::max(0.0f, glm::dot(currentTriangleNormal_world, s_normalized));
+                illumination_direct = (lightPower * cos_theta) / (4.0f * MY_PI * dist_sq);
+            }
+            
+            final_color = currentColor * (illumination_direct + indirectLightPowerPerArea);
         }
         
-        vec3 final_color = currentColor * (illumination_direct + indirectLightPowerPerArea);
         final_color = glm::clamp(final_color, 0.0f, 1.0f);
-        
         sdlAux->putPixelWithCapture(x, y, final_color);
     }
 }
 
 void Draw() {
-    // Clear depth buffer and set sky gradient background
+    // Clear depth buffer and set background
     for (int r = 0; r < SCREEN_HEIGHT; ++r) {
         for (int c = 0; c < SCREEN_WIDTH; ++c) {
+            // Initialize depth buffer to 0.0f (no geometry/infinite depth)
             depthBuffer[r][c] = 0.0f;
             
-            // Create white-blue gradient sky background
-            // Top of screen (r=0) = light blue, bottom of screen (r=SCREEN_HEIGHT-1) = white
-            float gradient_factor = static_cast<float>(r) / static_cast<float>(SCREEN_HEIGHT - 1);
+            vec3 background_color;
+            if (display_depth_buffer) {
+                // Black background for depth buffer visualization
+                background_color = vec3(0.0f, 0.0f, 0.0f);
+            } else {
+                // Create white-blue gradient sky background
+                // Top of screen (r=0) = light blue, bottom of screen (r=SCREEN_HEIGHT-1) = white
+                float gradient_factor = static_cast<float>(r) / static_cast<float>(SCREEN_HEIGHT - 1);
+                
+                // Sky blue at top: (0.5, 0.7, 1.0), white at bottom: (1.0, 1.0, 1.0)
+                vec3 sky_top = vec3(0.5f, 0.7f, 1.0f);    // Light blue
+                vec3 sky_bottom = vec3(1.0f, 1.0f, 1.0f); // White
+                
+                // Linear interpolation between top and bottom colors
+                background_color = sky_top * (1.0f - gradient_factor) + sky_bottom * gradient_factor;
+            }
             
-            // Sky blue at top: (0.5, 0.7, 1.0), white at bottom: (1.0, 1.0, 1.0)
-            vec3 sky_top = vec3(0.5f, 0.7f, 1.0f);    // Light blue
-            vec3 sky_bottom = vec3(1.0f, 1.0f, 1.0f); // White
-            
-            // Linear interpolation between top and bottom colors
-            vec3 sky_color = sky_top * (1.0f - gradient_factor) + sky_bottom * gradient_factor;
-            
-            // Set the background pixel
-            sdlAux->putPixelWithCapture(c, r, sky_color);
+            // Set the background pixel (depth remains 0.0f for sky)
+            sdlAux->putPixelWithCapture(c, r, background_color);
         }
     }
 
