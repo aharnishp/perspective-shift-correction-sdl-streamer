@@ -154,12 +154,12 @@ bool display_depth_buffer = false;  // New flag to display depth buffer instead 
 // bool invert_pos_z = false;  // Z-axis translation
 
 // VR rotation inversion toggles (global settings for tracked mode)
-bool invert_pitch = true;  // X-axis rotation
+bool invert_pitch = false;  // X-axis rotation
 bool invert_yaw = false;    // Y-axis rotation  
 bool invert_roll = false;   // Z-axis rotation
 
 // VR translation inversion toggles (global settings for tracked mode)
-bool invert_pos_x = false;  // X-axis translation
+bool invert_pos_x = true;  // X-axis translation
 bool invert_pos_y = true;  // Y-axis translation
 bool invert_pos_z = true;  // Z-axis translation
 
@@ -348,8 +348,8 @@ void convertDepthBufferTo16Bit(std::vector<uint16_t>& depth_16bit) {
             // Check for sky/background pixels (zinv == 0 means no geometry was rendered there)
             if (zinv <= 0.0f) {
                 // Sky/infinite depth - set to 0 to indicate infinite distance
-                depth_16bit[idx] = UINT16_MAX;
-                // depth_16bit[idx] = 0;
+                depth_16bit[idx] = 0;
+                // depth_16bit[idx] = UINT16_MAX;
             } else {
                 // Convert from 1/z to actual depth distance
                 float depth_world = 1.0f / zinv;
