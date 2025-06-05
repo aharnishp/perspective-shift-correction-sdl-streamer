@@ -7,6 +7,9 @@ From the streamer to the receiver (Port 8051):
 - captured timestamp (now change to be here in the front)
 
 - captured pose of camera (now change to be the second and before image data)
+  * Format: Same as incoming VR Head Pose Data (28 bytes)
+  * Coordinates: Unity world coordinates (matching the input pose)
+  * Purpose: Returns the exact pose used for rendering the frame
 
 - Color JPEG Image Data (streamed at ~30 FPS / every 33ms):
   * Image Resolution: 500x500 pixels
@@ -50,7 +53,7 @@ From the VR receiver to the streamer (PORT 8052):
 
 - VR Head Pose Data (28 bytes total, sent at 10 Hz / every 100ms):
   * Position (12 bytes): 3 x float32 (X, Y, Z in Unity world coordinates)
-  * Rotation (16 bytes): 4 x float32 (Quaternion X, Y, Z, W components)
+  * Rotation (16 bytes): 4 x float32 (Quaternion X, Y, Z, W components in Unity world coordinates)
   
   Binary format (little-endian):
   Bytes 0-3:   Position.X (float32)
@@ -60,6 +63,10 @@ From the VR receiver to the streamer (PORT 8052):
   Bytes 16-19: Rotation.Y (float32)
   Bytes 20-23: Rotation.Z (float32)
   Bytes 24-27: Rotation.W (float32)
+  
+  Note: All pose data is transmitted and received in Unity world coordinates.
+        The coordinate system is maintained consistently throughout the
+        pipeline to ensure accurate 6DoF camera pose tracking.
 
 - Field of View (in future)
 

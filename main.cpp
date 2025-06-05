@@ -1,6 +1,7 @@
 #include <iostream>
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include "ExtendedSDL2Aux.h"
 #include "TestModel.h"
 #include <algorithm>
@@ -60,7 +61,18 @@ struct PacketHeader {
     uint32_t frameId;
     uint32_t chunkIndex;
     uint32_t totalChunks;
-    uint8_t dataType; // 0 for JPEG
+    uint8_t dataType; // 0 for JPEG, 1 for depth
+};
+
+struct FrameMetadata {
+    uint64_t timestamp_us;  // Timestamp in microseconds since epoch
+    float cam_pos_x;        // Camera position X (world coordinates)
+    float cam_pos_y;        // Camera position Y (world coordinates) 
+    float cam_pos_z;        // Camera position Z (world coordinates)
+    float cam_rot_x;        // Camera rotation quaternion X (world coordinates)
+    float cam_rot_y;        // Camera rotation quaternion Y (world coordinates)
+    float cam_rot_z;        // Camera rotation quaternion Z (world coordinates)
+    float cam_rot_w;        // Camera rotation quaternion W (world coordinates)
 };
 #pragma pack(pop)
 
@@ -85,7 +97,9 @@ const int JPEG_QUALITY = 75;
 const int SEND_INTERVAL_MS = 33; // ~30 FPS
 const int MAX_UDP_PACKET_SIZE = 1400;
 const int HEADER_SIZE = sizeof(PacketHeader);
+const int METADATA_SIZE = sizeof(FrameMetadata);
 const int MAX_CHUNK_DATA_SIZE = MAX_UDP_PACKET_SIZE - HEADER_SIZE;
+const int MAX_FIRST_CHUNK_DATA_SIZE = MAX_UDP_PACKET_SIZE - HEADER_SIZE - METADATA_SIZE;
 const float MY_PI = 3.141592653f;
 
 // Depth buffer configuration
@@ -119,6 +133,11 @@ std::chrono::steady_clock::time_point last_mouse_movement;
 vec3 base_position(0, 0, -3.001);
 glm::quat base_rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
 bool use_tracking_pose = true;
+
+// Store original world pose for metadata (not converted to our coordinate system)
+vec3 world_position = vec3(0.0f, 0.0f, 3.0f);
+glm::quat world_rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+bool has_world_pose = false;
 
 // Depth buffer control
 bool invert_depth_map = false;
@@ -217,19 +236,24 @@ void pose_receiver_thread_func() {
                 float* float_data = reinterpret_cast<float*>(buffer);
                 
                 Pose6DoF new_pose;
-                new_pose.position.x = float_data[0]; // Unity X
-                new_pose.position.y = float_data[1]; // Unity Y  
-                new_pose.position.z = float_data[2]; // Unity Z
-                new_pose.rotation.x = float_data[3]; // Quaternion X
-                new_pose.rotation.y = float_data[4]; // Quaternion Y
-                new_pose.rotation.z = float_data[5]; // Quaternion Z
-                new_pose.rotation.w = float_data[6]; // Quaternion W
+                new_pose.position.x = float_data[0]; // Unity world X
+                new_pose.position.y = float_data[1]; // Unity world Y  
+                new_pose.position.z = float_data[2]; // Unity world Z
+                new_pose.rotation.x = float_data[3]; // Quaternion X (world space)
+                new_pose.rotation.y = float_data[4]; // Quaternion Y (world space)
+                new_pose.rotation.z = float_data[5]; // Quaternion Z (world space)
+                new_pose.rotation.w = float_data[6]; // Quaternion W (world space)
                 
                 // Update shared pose data thread-safely
                 {
                     std::lock_guard<std::mutex> lock(pose_mutex);
                     shared_pose = new_pose;
                     pose_received = true;
+                    
+                    // Store original world pose for metadata (exactly as received from Unity)
+                    world_position = new_pose.position;
+                    world_rotation = new_pose.rotation;
+                    has_world_pose = true;
                 }
                 
                 // Log received pose
@@ -352,9 +376,66 @@ bool initializeStreaming() {
     return true;
 }
 
+// Helper function to get current frame metadata (timestamp and camera pose)
+FrameMetadata getCurrentFrameMetadata() {
+    FrameMetadata metadata;
+    
+    // Get current timestamp in microseconds since epoch
+    auto now = std::chrono::system_clock::now();
+    auto duration = now.time_since_epoch();
+    metadata.timestamp_us = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
+    
+    // Use the original world pose if available (maintains world coordinates throughout pipeline)
+    if (has_world_pose) {
+        // Send back the original world pose exactly as received from Unity
+        // This maintains consistency in the coordinate reference frame
+        metadata.cam_pos_x = world_position.x;
+        metadata.cam_pos_y = world_position.y;
+        metadata.cam_pos_z = world_position.z;  // Keep original world coordinates
+        
+        // Send back the original world rotation exactly as received from Unity
+        metadata.cam_rot_x = world_rotation.x;
+        metadata.cam_rot_y = world_rotation.y;
+        metadata.cam_rot_z = world_rotation.z;  // Keep original world coordinates
+        metadata.cam_rot_w = world_rotation.w;
+    } else {
+        // Fallback to current camera pose (convert from our coordinate system to Unity world coordinates)
+        // Our system: Y-up, Z-backward, X-right (right-handed)
+        // Unity world: Y-up, Z-forward, X-right (left-handed)
+        // 
+        // IMPORTANT: Send the actual camera pose in Unity world coordinates, 
+        // NOT the "un-inverted" version. The inversions are user preferences
+        // for input handling, but the output pose should match what was rendered.
+        metadata.cam_pos_x = cameraPos.x;
+        metadata.cam_pos_y = cameraPos.y;
+        metadata.cam_pos_z = -cameraPos.z;  // Convert Z from our backward system to Unity's forward system
+        
+        // Convert rotation matrix back to quaternion and then to Unity coordinates
+        glm::quat cam_quat = glm::quat_cast(R);
+        
+        // Convert quaternion from our coordinate system to Unity's
+        // Our system: Y-up, Z-backward, X-right (right-handed)
+        // Unity world: Y-up, Z-forward, X-right (left-handed)
+        metadata.cam_rot_x = cam_quat.x;
+        metadata.cam_rot_y = cam_quat.y;
+        metadata.cam_rot_z = -cam_quat.z;  // Invert Z component for coordinate system conversion
+        metadata.cam_rot_w = cam_quat.w;
+    }
+    
+    return metadata;
+}
+
 bool sendDataPackets(const unsigned char* data, size_t data_size, uint8_t data_type) {
-    uint32_t total_chunks = (data_size + MAX_CHUNK_DATA_SIZE - 1) / MAX_CHUNK_DATA_SIZE;
-    if (total_chunks == 0 && data_size > 0) total_chunks = 1;
+    // Calculate total chunks considering metadata in first chunk
+    size_t first_chunk_data_size = std::min(data_size, static_cast<size_t>(MAX_FIRST_CHUNK_DATA_SIZE));
+    size_t remaining_data_size = data_size - first_chunk_data_size;
+    uint32_t total_chunks = 1; // At least one chunk for first chunk with metadata
+    if (remaining_data_size > 0) {
+        total_chunks += (remaining_data_size + MAX_CHUNK_DATA_SIZE - 1) / MAX_CHUNK_DATA_SIZE;
+    }
+    
+    // Get frame metadata for first packet
+    FrameMetadata metadata = getCurrentFrameMetadata();
 
     std::vector<unsigned char> packet_buffer(MAX_UDP_PACKET_SIZE);
     PacketHeader* header = reinterpret_cast<PacketHeader*>(packet_buffer.data());
@@ -369,10 +450,29 @@ bool sendDataPackets(const unsigned char* data, size_t data_size, uint8_t data_t
     for (uint32_t chunk_idx = 0; chunk_idx < total_chunks; chunk_idx++) {
         header->chunkIndex = htonl(chunk_idx);
 
-        int current_chunk_data_size = std::min(static_cast<size_t>(MAX_CHUNK_DATA_SIZE), bytes_remaining);
+        int packet_size = HEADER_SIZE;
         
-        memcpy(packet_buffer.data() + HEADER_SIZE, data_ptr, current_chunk_data_size);
-        int packet_size = HEADER_SIZE + current_chunk_data_size;
+        if (chunk_idx == 0) {
+            // First chunk: include metadata
+            memcpy(packet_buffer.data() + HEADER_SIZE, &metadata, METADATA_SIZE);
+            packet_size += METADATA_SIZE;
+            
+            // Add first chunk of data after metadata
+            if (bytes_remaining > 0) {
+                int current_chunk_data_size = std::min(static_cast<size_t>(MAX_FIRST_CHUNK_DATA_SIZE), bytes_remaining);
+                memcpy(packet_buffer.data() + HEADER_SIZE + METADATA_SIZE, data_ptr, current_chunk_data_size);
+                packet_size += current_chunk_data_size;
+                data_ptr += current_chunk_data_size;
+                bytes_remaining -= current_chunk_data_size;
+            }
+        } else {
+            // Subsequent chunks: data only
+            int current_chunk_data_size = std::min(static_cast<size_t>(MAX_CHUNK_DATA_SIZE), bytes_remaining);
+            memcpy(packet_buffer.data() + HEADER_SIZE, data_ptr, current_chunk_data_size);
+            packet_size += current_chunk_data_size;
+            data_ptr += current_chunk_data_size;
+            bytes_remaining -= current_chunk_data_size;
+        }
 
         int bytes_sent = sendto(image_sender_socket,
             packet_buffer.data(),
@@ -385,9 +485,6 @@ bool sendDataPackets(const unsigned char* data, size_t data_size, uint8_t data_t
             perror("sendto failed");
             return false;
         }
-
-        data_ptr += current_chunk_data_size;
-        bytes_remaining -= current_chunk_data_size;
 
         if (total_chunks > 1 && chunk_idx < total_chunks - 1) {
             std::this_thread::sleep_for(std::chrono::microseconds(100));
@@ -521,8 +618,8 @@ void updateCameraPose() {
             current_pose = shared_pose;
         }
         
-        // Convert Unity coordinates to our coordinate system
-        // Unity: Y-up, Z-forward, X-right (left-handed)
+        // Convert Unity world coordinates to our coordinate system
+        // Unity world: Y-up, Z-forward, X-right (left-handed)
         // Our system: Y-up, Z-backward, X-right (right-handed)
         vec3 unity_position = vec3(current_pose.position.x, current_pose.position.y, -current_pose.position.z);
         

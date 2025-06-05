@@ -1032,6 +1032,8 @@ CMakeFiles/VRStreamer.dir/main.cpp.o: \
   /Users/aharnish/dev/VR/sdl-streamer/glm/glm/gtc/../gtc/../glm.hpp \
   /Users/aharnish/dev/VR/sdl-streamer/glm/glm/gtc/../gtc/half_float.inl \
   /Users/aharnish/dev/VR/sdl-streamer/glm/glm/gtc/quaternion.inl \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/gtc/matrix_transform.hpp \
+  /Users/aharnish/dev/VR/sdl-streamer/glm/glm/gtc/matrix_transform.inl \
   /Users/aharnish/dev/VR/sdl-streamer/ExtendedSDL2Aux.h \
   /Users/aharnish/dev/VR/sdl-streamer/SDL2Auxiliary/SDL2Auxiliary.h \
   /opt/homebrew/include/SDL2/SDL.h /opt/homebrew/include/SDL2/SDL_main.h \
