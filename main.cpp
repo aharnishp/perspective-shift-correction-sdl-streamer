@@ -1074,11 +1074,24 @@ void PixelShader(const Pixel& p) {
 }
 
 void Draw() {
-    sdlAux->clearPixels();
-
+    // Clear depth buffer and set sky gradient background
     for (int r = 0; r < SCREEN_HEIGHT; ++r) {
         for (int c = 0; c < SCREEN_WIDTH; ++c) {
             depthBuffer[r][c] = 0.0f;
+            
+            // Create white-blue gradient sky background
+            // Top of screen (r=0) = light blue, bottom of screen (r=SCREEN_HEIGHT-1) = white
+            float gradient_factor = static_cast<float>(r) / static_cast<float>(SCREEN_HEIGHT - 1);
+            
+            // Sky blue at top: (0.5, 0.7, 1.0), white at bottom: (1.0, 1.0, 1.0)
+            vec3 sky_top = vec3(0.5f, 0.7f, 1.0f);    // Light blue
+            vec3 sky_bottom = vec3(1.0f, 1.0f, 1.0f); // White
+            
+            // Linear interpolation between top and bottom colors
+            vec3 sky_color = sky_top * (1.0f - gradient_factor) + sky_bottom * gradient_factor;
+            
+            // Set the background pixel
+            sdlAux->putPixelWithCapture(c, r, sky_color);
         }
     }
 
