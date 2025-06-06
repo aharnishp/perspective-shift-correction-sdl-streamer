@@ -113,7 +113,7 @@ const float MY_PI = 3.141592653f;
 const float DEPTH_NEAR = 0.1f;          // Near clipping plane
 const float DEPTH_FAR = 100.0f;         // Far clipping plane
 const float DEPTH_SCALE_8BIT = 1000.0f; // Convert to millimeters
-const float MAX_DEPTH_8BIT_MM = 8000.0f; // 8 meters in millimeters
+const float MAX_DEPTH_8BIT_MM = 16000.0f; // 8 meters in millimeters
 
 // === Global Variables ===
 ExtendedSDL2Aux *sdlAux;
@@ -130,7 +130,7 @@ vec3 cameraPos(0, 0, -3.001);
 mat3 R;
 float yaw = 0.0f;
 float pitch = 0.0f;
-float focal = (SCREEN_HEIGHT + SCREEN_WIDTH) * (0.1f);
+float focal = (SCREEN_HEIGHT + SCREEN_WIDTH) * (0.125f);
 
 // === 6DoF Camera Control System ===
 // Manual control state
