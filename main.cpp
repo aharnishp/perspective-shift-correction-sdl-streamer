@@ -87,6 +87,13 @@ struct Vertex {
     vec3 position;
 };
 
+// New structure for the clipping process
+struct ProcessedVertex {
+    vec3 world_pos;
+    vec3 camera_pos;
+};
+
+
 // === Configuration ===
 const int SCREEN_WIDTH = 1500;
 const int SCREEN_HEIGHT = 1500;
@@ -193,21 +200,18 @@ std::thread pose_receiver_thread;
 void pose_receiver_thread_func() {
     std::cout << "[Pose Receiver] Thread starting..." << std::endl;
     
-    // Create UDP socket for receiving pose data
     pose_receiver_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (pose_receiver_socket == INVALID_SOCKET) {
         std::cerr << "[Pose Receiver] Failed to create socket" << std::endl;
         return;
     }
     
-    // Set up address for listening
     sockaddr_in listen_addr;
     memset(&listen_addr, 0, sizeof(listen_addr));
     listen_addr.sin_family = AF_INET;
     listen_addr.sin_addr.s_addr = INADDR_ANY;
     listen_addr.sin_port = htons(POSE_LISTEN_PORT);
     
-    // Bind socket to listen address
     if (::bind(pose_receiver_socket, (struct sockaddr*)&listen_addr, sizeof(listen_addr)) == SOCKET_ERROR) {
         std::cerr << "[Pose Receiver] Failed to bind to port " << POSE_LISTEN_PORT << std::endl;
         closesocket(pose_receiver_socket);
@@ -216,77 +220,49 @@ void pose_receiver_thread_func() {
     
     std::cout << "[Pose Receiver] Listening on port " << POSE_LISTEN_PORT << std::endl;
     
-    // Set up for non-blocking receive with timeout
     pollfd poll_fd;
     poll_fd.fd = pose_receiver_socket;
     poll_fd.events = POLLIN;
     
-    const int TIMEOUT_MS = 1000; // 1 second timeout
-    char buffer[28]; // Pose data is 28 bytes: 3 floats for position + 4 floats for quaternion
+    const int TIMEOUT_MS = 1000; 
+    char buffer[28];
     
     while (keep_running) {
-        // Check for incoming data with timeout
         int poll_result = poll(&poll_fd, 1, TIMEOUT_MS);
         
         if (poll_result > 0 && (poll_fd.revents & POLLIN)) {
             sockaddr_in sender_addr;
             socklen_t sender_len = sizeof(sender_addr);
             
-            // Receive pose data
             ssize_t bytes_received = recvfrom(pose_receiver_socket, buffer, sizeof(buffer), 0, 
                                               (struct sockaddr*)&sender_addr, &sender_len);
             
-            if (bytes_received == 28) { // Expected size for pose data
-                // Parse pose data (little-endian floats)
+            if (bytes_received == 28) { 
                 float* float_data = reinterpret_cast<float*>(buffer);
                 
                 Pose6DoF new_pose;
-                new_pose.position.x = float_data[0]; // Unity world X
-                new_pose.position.y = float_data[1]; // Unity world Y  
-                new_pose.position.z = float_data[2]; // Unity world Z
-                new_pose.rotation.x = float_data[3]; // Quaternion X (world space)
-                new_pose.rotation.y = float_data[4]; // Quaternion Y (world space)
-                new_pose.rotation.z = float_data[5]; // Quaternion Z (world space)
-                new_pose.rotation.w = float_data[6]; // Quaternion W (world space)
+                new_pose.position.x = float_data[0];
+                new_pose.position.y = float_data[1]; 
+                new_pose.position.z = float_data[2];
+                new_pose.rotation.x = float_data[3];
+                new_pose.rotation.y = float_data[4];
+                new_pose.rotation.z = float_data[5];
+                new_pose.rotation.w = float_data[6];
                 
-                // Update shared pose data thread-safely
                 {
                     std::lock_guard<std::mutex> lock(pose_mutex);
                     shared_pose = new_pose;
                     pose_received = true;
                     
-                    // Store original world pose for metadata (exactly as received from Unity)
                     world_position = new_pose.position;
                     world_rotation = new_pose.rotation;
                     has_world_pose = true;
                 }
                 
-                // Log received pose
-                std::cout << "[Pose Receiver] Received pose - Position: ("
-                          << std::fixed << std::setprecision(3)
-                          << new_pose.position.x << ", "
-                          << new_pose.position.y << ", "
-                          << new_pose.position.z << ") Rotation: ("
-                          << new_pose.rotation.x << ", "
-                          << new_pose.rotation.y << ", "
-                          << new_pose.rotation.z << ", "
-                          << new_pose.rotation.w << ")" << std::endl;
-                          
             } else if (bytes_received > 0) {
                 std::cerr << "[Pose Receiver] Received unexpected data size: " << bytes_received << " bytes (expected 28)" << std::endl;
-                
-                // Debug: Print the received bytes in hex format
-                std::cout << "[Pose Receiver Debug] Received bytes: ";
-                for (ssize_t i = 0; i < std::min(bytes_received, static_cast<ssize_t>(16)); i++) {
-                    std::cout << std::hex << std::setw(2) << std::setfill('0') << (unsigned char)buffer[i] << " ";
-                }
-                std::cout << std::dec << std::endl;
             }
-        } else if (poll_result == 0) {
-            // Timeout - continue loop
-            continue;
-        } else {
-            // Error
+        } else if (poll_result < 0) {
             if (keep_running) {
                 std::cerr << "[Pose Receiver] Poll error" << std::endl;
             }
@@ -335,37 +311,23 @@ void convertDepthBufferTo8Bit(std::vector<uint8_t>& depth_8bit) {
     for (int y = 0; y < SCREEN_HEIGHT; ++y) {
         for (int x = 0; x < SCREEN_WIDTH; ++x) {
             int idx = y * SCREEN_WIDTH + x;
-            // Invert Y coordinate to match color buffer orientation
             int inverted_y = SCREEN_HEIGHT - 1 - y;
             float zinv = depthBuffer[inverted_y][x];
             
-            // Check for sky/background pixels (zinv == 0 means no geometry was rendered there)
             if (zinv <= 0.0f) {
-                // Sky/infinite depth - set to 0 to indicate infinite distance
                 depth_8bit[idx] = 0;
             } else {
-                // Convert from 1/z to actual depth distance
                 float depth_world = 1.0f / zinv;
-                
-                // Clamp depth to reasonable range before scaling
                 depth_world = glm::clamp(depth_world, DEPTH_NEAR, DEPTH_FAR);
-                
-                // Convert to millimeters
                 float depth_mm = depth_world * DEPTH_SCALE_8BIT;
-                
-                // Scale to 8-bit range: 8 meters (8000mm) maps to 255
                 float normalized_depth = depth_mm / MAX_DEPTH_8BIT_MM;
-                
-                // Clamp to [0, 1] range and convert to 8-bit
                 normalized_depth = glm::clamp(normalized_depth, 0.0f, 1.0f);
                 uint8_t depth_value = static_cast<uint8_t>(normalized_depth * 255.0f);
                 
-                // Ensure we don't accidentally use 0 for actual geometry (reserve 0 for infinite)
                 if (depth_value == 0 && zinv > 0.0f) {
-                    depth_value = 1; // Minimum non-infinite depth value
+                    depth_value = 1; 
                 }
                 
-                // Apply depth inversion if enabled
                 if (invert_depth_map) {
                     depth_8bit[idx] = 255 - depth_value;
                 } else {
@@ -450,7 +412,6 @@ bool sendDataPackets(const unsigned char* data, size_t data_size, uint8_t data_t
 
     for (uint32_t chunk_idx = 0; chunk_idx < total_chunks; chunk_idx++) {
         header->chunkIndex = htonl(chunk_idx);
-
         int packet_size = HEADER_SIZE;
         
         if (chunk_idx == 0) {
@@ -472,18 +433,11 @@ bool sendDataPackets(const unsigned char* data, size_t data_size, uint8_t data_t
             bytes_remaining -= current_chunk_data_size;
         }
 
-        int bytes_sent = sendto(image_sender_socket,
-            packet_buffer.data(),
-            packet_size,
-            0,
-            reinterpret_cast<const struct sockaddr*>(&receiver_addr),
-            sizeof(receiver_addr));
-
-        if (bytes_sent == SOCKET_ERROR) {
+        if (sendto(image_sender_socket, packet_buffer.data(), packet_size, 0,
+            reinterpret_cast<const struct sockaddr*>(&receiver_addr), sizeof(receiver_addr)) == SOCKET_ERROR) {
             perror("sendto failed");
             return false;
         }
-
         if (total_chunks > 1 && chunk_idx < total_chunks - 1) {
             std::this_thread::sleep_for(std::chrono::microseconds(100));
         }
@@ -492,9 +446,8 @@ bool sendDataPackets(const unsigned char* data, size_t data_size, uint8_t data_t
 }
 
 void streamFrame() {
-    // Check if streaming is paused
     if (streaming_paused.load()) {
-        return; // Skip streaming this frame
+        return;
     }
     
     frame_count++;
@@ -503,29 +456,17 @@ void streamFrame() {
     extractRGBFromSDL(sdlAux, rgb_buffer);
     
     MemoryBuffer jpeg_buffer;
-    int jpeg_success = stbi_write_jpg_to_func(
-        write_memory_buffer,
-        &jpeg_buffer,
-        SCREEN_WIDTH, SCREEN_HEIGHT,
-        3,
-        rgb_buffer.data(),
-        JPEG_QUALITY
-    );
-
-    if (jpeg_success && jpeg_buffer.data && jpeg_buffer.size > 0) {
+    if (stbi_write_jpg_to_func(write_memory_buffer, &jpeg_buffer, SCREEN_WIDTH, SCREEN_HEIGHT, 3, rgb_buffer.data(), JPEG_QUALITY) && jpeg_buffer.size > 0) {
         sendDataPackets(jpeg_buffer.data, jpeg_buffer.size, 0);
     } else {
         std::cerr << "[Stream Error] Failed to encode JPEG" << std::endl;
     }
 
-    // Convert depth buffer to 8-bit format
     std::vector<uint8_t> depth_8bit;
     convertDepthBufferTo8Bit(depth_8bit);
     
     if (!depth_8bit.empty()) {
-        const unsigned char* depth_data = reinterpret_cast<const unsigned char*>(depth_8bit.data());
-        size_t depth_size = depth_8bit.size() * sizeof(uint8_t);
-        sendDataPackets(depth_data, depth_size, 1);
+        sendDataPackets(reinterpret_cast<const unsigned char*>(depth_8bit.data()), depth_8bit.size(), 1);
     } else {
         std::cerr << "[Stream Error] Depth buffer is empty" << std::endl;
     }
@@ -537,18 +478,8 @@ mat3 quaternionToRotationMatrix(const glm::quat& q) {
 }
 
 mat3 createRotationMatrix(float yaw, float pitch) {
-    mat3 R_yaw = glm::mat3(
-        glm::vec3(cos(yaw), 0.0f, sin(yaw)),
-        glm::vec3(0.0f, 1.0f, 0.0f),
-        glm::vec3(-sin(yaw), 0.0f, cos(yaw))
-    );
-
-    mat3 R_pitch = glm::mat3(
-        glm::vec3(1.0f, 0.0f, 0.0f),
-        glm::vec3(0.0f, cos(pitch), -sin(pitch)),
-        glm::vec3(0.0f, sin(pitch), cos(pitch))
-    );
-    
+    mat3 R_yaw = glm::mat3(cos(yaw), 0.0f, sin(yaw), 0.0f, 1.0f, 0.0f, -sin(yaw), 0.0f, cos(yaw));
+    mat3 R_pitch = glm::mat3(1.0f, 0.0f, 0.0f, 0.0f, cos(pitch), -sin(pitch), 0.0f, sin(pitch), cos(pitch));
     return R_pitch * R_yaw;
 }
 
@@ -599,12 +530,11 @@ void updateCameraPose() {
 // === Renderer Functions ===
 void Update(void);
 void Draw(void);
-void VertexShaderPixel(const Vertex& v_in, Pixel& p_out);
-void InterpolatePixel(Pixel a, Pixel b, vector<Pixel>& result);
+void RasterizeTriangle(const vector<Pixel>& projected_vertices);
 void ComputePolygonRowsPixel(const vector<Pixel>& vertexPixels, vector<Pixel>& leftPixels, vector<Pixel>& rightPixels, int& polygonMinY, int& polygonMaxY);
 void DrawLineHorizontalDepth(const Pixel& start, const Pixel& end);
 void DrawRowsPixel(const vector<Pixel>& leftPixels, const vector<Pixel>& rightPixels, int polygonMinY, int polygonMaxY);
-void DrawPolygonPixel(const vector<Vertex>& vertices);
+void DrawPolygon(const vector<Vertex>& vertices);
 void PixelShader(const Pixel& p);
 
 void Update(void) {
@@ -622,7 +552,6 @@ void Update(void) {
                           keystate[SDL_SCANCODE_A] || keystate[SDL_SCANCODE_D] || 
                           keystate[SDL_SCANCODE_SPACE] || keystate[SDL_SCANCODE_LCTRL]);
     
-    // Toggle streaming pause with P key
     static bool p_key_was_pressed = false;
     if (keystate[SDL_SCANCODE_P] && !p_key_was_pressed) {
         streaming_paused = !streaming_paused.load();
@@ -677,38 +606,15 @@ void Update(void) {
     }
     z_key_was_pressed = keystate[SDL_SCANCODE_Z];
     
-    static bool q_key_was_pressed = false;
-    if (keystate[SDL_SCANCODE_Q] && !q_key_was_pressed) {
-        invert_pos_x = !invert_pos_x;
-        std::cout << "[VR Position] X-axis inversion: " << (invert_pos_x ? "ON" : "OFF") << std::endl;
-    }
-    q_key_was_pressed = keystate[SDL_SCANCODE_Q];
-    
-    static bool e_key_was_pressed = false;
-    if (keystate[SDL_SCANCODE_E] && !e_key_was_pressed) {
-        invert_pos_y = !invert_pos_y;
-        std::cout << "[VR Position] Y-axis inversion: " << (invert_pos_y ? "ON" : "OFF") << std::endl;
-    }
-    e_key_was_pressed = keystate[SDL_SCANCODE_E];
-    
-    static bool r_key_was_pressed = false;
-    if (keystate[SDL_SCANCODE_R] && !r_key_was_pressed) {
-        invert_pos_z = !invert_pos_z;
-        std::cout << "[VR Position] Z-axis inversion: " << (invert_pos_z ? "ON" : "OFF") << std::endl;
-    }
-    r_key_was_pressed = keystate[SDL_SCANCODE_R];
-    
     if (use_tracking_pose) {
         if (mouse_input || keyboard_input) {
             manual_control_active = true;
             last_mouse_movement = std::chrono::steady_clock::now();
             
             if (mouse_input) {
-                if (dx != 0) manual_yaw -= dx * -0.005f;
-                if (dy != 0) {
-                    manual_pitch -= dy * 0.005f;
-                    manual_pitch = glm::clamp(manual_pitch, -MY_PI / 2.0f + 0.01f, MY_PI / 2.0f - 0.01f);
-                }
+                manual_yaw -= dx * -0.005f;
+                manual_pitch -= dy * 0.005f;
+                manual_pitch = glm::clamp(manual_pitch, -MY_PI / 2.0f + 0.01f, MY_PI / 2.0f - 0.01f);
             }
             
             float moveSpeed = 0.005f * dt;
@@ -725,25 +631,23 @@ void Update(void) {
         } else {
             auto now = std::chrono::steady_clock::now();
             if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_mouse_movement).count() > 2000) {
-                manual_control_active = false;
-                manual_yaw = 0.0f;
-                manual_pitch = 0.0f;
-                manual_position_offset = vec3(0.0f);
+                if(manual_control_active) {
+                    manual_control_active = false;
+                    manual_yaw = 0.0f;
+                    manual_pitch = 0.0f;
+                    manual_position_offset = vec3(0.0f);
+                }
             }
         }
     } else {
         manual_control_active = false;
-        
         if (mouse_input) {
-            if (dx != 0) yaw -= dx * -0.005f;
-            if (dy != 0) {
-                pitch -= dy * 0.005f;
-                pitch = glm::clamp(pitch, -MY_PI / 2.0f + 0.01f, MY_PI / 2.0f - 0.01f);
-            }
+            yaw -= dx * -0.005f;
+            pitch -= dy * 0.005f;
+            pitch = glm::clamp(pitch, -MY_PI / 2.0f + 0.01f, MY_PI / 2.0f - 0.01f);
         }
-        
         float moveSpeed = 0.005f * dt;
-        mat3 cameraToWorld = glm::transpose(R);
+        mat3 cameraToWorld = glm::transpose(createRotationMatrix(yaw, pitch));
         vec3 forward_world = cameraToWorld * vec3(0,0,-1);
         vec3 right_world = cameraToWorld * vec3(1,0,0);
 
@@ -755,77 +659,71 @@ void Update(void) {
         if (keystate[SDL_SCANCODE_LCTRL]) cameraPos.y -= moveSpeed;
     }
 
-    float lightMoveSpeed = 0.005f * dt;
-    if (keystate[SDL_SCANCODE_UP]) lightPos.z += lightMoveSpeed;
-    if (keystate[SDL_SCANCODE_DOWN]) lightPos.z -= lightMoveSpeed;
-    if (keystate[SDL_SCANCODE_LEFT]) lightPos.x -= lightMoveSpeed;
-    if (keystate[SDL_SCANCODE_RIGHT]) lightPos.x += lightMoveSpeed;
-    if (keystate[SDL_SCANCODE_PAGEUP]) lightPos.y += lightMoveSpeed;
-    if (keystate[SDL_SCANCODE_PAGEDOWN]) lightPos.y -= lightMoveSpeed;
-
     updateCameraPose();
 }
 
-void VertexShaderPixel(const Vertex& v_in, Pixel& p_out) {
-    vec3 position_camera_space = R * (v_in.position - cameraPos);
+// ----------------------------------------------------------------------------
+//
+// START OF RE-ENGINEERED RENDERING FUNCTIONS
+//
+// ----------------------------------------------------------------------------
 
-    if (position_camera_space.z < 0.001f) {
-        p_out.x = -1; // Use sentinel value to mark as behind camera
-        p_out.y = -1;
-        p_out.zinv = 0;
-        p_out.pos_world_times_zinv = vec3(0.0f);
-        return;
+/**
+ * @brief Fills the left and right edge buffers for a polygon for scanline rasterization.
+ */
+void ComputePolygonRowsPixel(const vector<Pixel>& vertexPixels, vector<Pixel>& leftPixels, vector<Pixel>& rightPixels, int& polygonMinY, int& polygonMaxY) {
+    polygonMinY = SCREEN_HEIGHT;
+    polygonMaxY = -1;
+
+    // Find the actual Y-bounds of the polygon on screen.
+    for (const auto& p : vertexPixels) {
+        polygonMinY = std::min(polygonMinY, p.y);
+        polygonMaxY = std::max(polygonMaxY, p.y);
     }
 
-    p_out.zinv = 1.0f / position_camera_space.z;
-    p_out.x = static_cast<int>(round(focal * position_camera_space.x * p_out.zinv + SCREEN_WIDTH / 2.0f));
-    p_out.y = static_cast<int>(round(focal * position_camera_space.y * p_out.zinv + SCREEN_HEIGHT / 2.0f));
-    p_out.pos_world_times_zinv = v_in.position * p_out.zinv;
-}
+    polygonMinY = std::max(0, polygonMinY);
+    polygonMaxY = std::min(SCREEN_HEIGHT - 1, polygonMaxY);
 
-void InterpolatePixel(Pixel a, Pixel b, vector<Pixel>& result) {
-    int N = result.size();
-    if (N == 0) return;
-    if (N == 1) {
-        result[0] = a;
-        return;
+    if (polygonMinY > polygonMaxY) return;
+
+    for (int y = polygonMinY; y <= polygonMaxY; ++y) {
+        leftPixels[y].x = SCREEN_WIDTH;
+        rightPixels[y].x = 0;
     }
 
-    float num_steps = static_cast<float>(N - 1);
-    if (num_steps < 1e-5) {
-        fori(i,N) result[i] = a;
-        return;
-    }
+    for (size_t i = 0; i < vertexPixels.size(); ++i) {
+        Pixel p1 = vertexPixels[i];
+        Pixel p2 = vertexPixels[(i + 1) % vertexPixels.size()];
 
-    float x_step = static_cast<float>(b.x - a.x) / num_steps;
-    float y_step = static_cast<float>(b.y - a.y) / num_steps;
-    float zinv_step = (b.zinv - a.zinv) / num_steps;
-    vec3 pos_world_times_zinv_step = (b.pos_world_times_zinv - a.pos_world_times_zinv) / num_steps;
-
-    float current_x = static_cast<float>(a.x);
-    float current_y = static_cast<float>(a.y);
-    float current_zinv = a.zinv;
-    vec3 current_pos_world_times_zinv = a.pos_world_times_zinv;
-
-    fori(i, N) {
-        result[i].x = static_cast<int>(round(current_x));
-        result[i].y = static_cast<int>(round(current_y));
-        result[i].zinv = current_zinv;
-        result[i].pos_world_times_zinv = current_pos_world_times_zinv;
+        if (p1.y > p2.y) std::swap(p1, p2);
+        if (p1.y == p2.y || p2.y < polygonMinY || p1.y > polygonMaxY) continue;
         
-        current_x += x_step;
-        current_y += y_step;
-        current_zinv += zinv_step;
-        current_pos_world_times_zinv += pos_world_times_zinv_step;
+        int startY = std::max(p1.y, polygonMinY);
+        int endY = std::min(p2.y, polygonMaxY);
+        
+        float dy = static_cast<float>(p2.y - p1.y);
+        if(abs(dy) < 1e-5) continue;
+
+        for (int y = startY; y <= endY; ++y) {
+            float t = (static_cast<float>(y) - p1.y) / dy;
+            Pixel p;
+            p.y = y;
+            p.x = static_cast<int>(round(glm::mix(static_cast<float>(p1.x), static_cast<float>(p2.x), t)));
+            p.zinv = glm::mix(p1.zinv, p2.zinv, t);
+            p.pos_world_times_zinv = glm::mix(p1.pos_world_times_zinv, p2.pos_world_times_zinv, t);
+            
+            if (p.x < leftPixels[y].x) leftPixels[y] = p;
+            if (p.x > rightPixels[y].x) rightPixels[y] = p;
+        }
     }
 }
 
+/**
+ * @brief Draws a horizontal line with perspective-correct depth interpolation.
+ */
 void DrawLineHorizontalDepth(const Pixel& startNode, const Pixel& endNode) {
     int y = startNode.y;
-
-    if (y < 0 || y >= SCREEN_HEIGHT) {
-        return;
-    }
+    if (y < 0 || y >= SCREEN_HEIGHT) return;
 
     int x_start = startNode.x;
     int x_end = endNode.x;
@@ -842,7 +740,7 @@ void DrawLineHorizontalDepth(const Pixel& startNode, const Pixel& endNode) {
         currentPixel.x = x;
         currentPixel.y = y;
 
-        if (abs(dx_row) < 1e-5) {
+        if (abs(dx_row) < 1) {
             currentPixel.zinv = startNode.zinv;
             currentPixel.pos_world_times_zinv = startNode.pos_world_times_zinv;
         } else {
@@ -855,149 +753,106 @@ void DrawLineHorizontalDepth(const Pixel& startNode, const Pixel& endNode) {
     }
 }
 
+/**
+ * @brief Draws the horizontal rows of a polygon using the pre-computed edge buffers.
+ */
 void DrawRowsPixel(const vector<Pixel>& leftPixels, const vector<Pixel>& rightPixels, int polygonMinY, int polygonMaxY) {
     for (int y = polygonMinY; y <= polygonMaxY; ++y) {
         if (y < 0 || y >= SCREEN_HEIGHT) continue;
-
         if (leftPixels[y].x <= rightPixels[y].x) {
             DrawLineHorizontalDepth(leftPixels[y], rightPixels[y]);
         }
     }
 }
 
-// MODIFIED FUNCTION: More robust rasterizer that correctly handles off-screen vertices.
-void ComputePolygonRowsPixel(const vector<Pixel>& vertexPixels, vector<Pixel>& leftPixels, vector<Pixel>& rightPixels, int& polygonMinY, int& polygonMaxY) {
-    polygonMinY = SCREEN_HEIGHT;
-    polygonMaxY = -1;
+/**
+ * @brief Rasterizes a single triangle, defined by 3 projected vertices.
+ */
+void RasterizeTriangle(const vector<Pixel>& projected_vertices) {
+    if (projected_vertices.size() != 3) return;
 
-    // Find the actual Y-bounds of the polygon on screen.
-    for (const auto& p : vertexPixels) {
-        if (p.x != -1) { // Only consider valid vertices
-            polygonMinY = std::min(polygonMinY, p.y);
-            polygonMaxY = std::max(polygonMaxY, p.y);
-        }
-    }
-
-    // Clamp Y-bounds to the screen dimensions for iteration.
-    polygonMinY = std::max(0, polygonMinY);
-    polygonMaxY = std::min(SCREEN_HEIGHT - 1, polygonMaxY);
-
-    if (polygonMinY > polygonMaxY) return;
-
-    // Initialize left and right edge buffers for the visible scanlines.
-    for (int y = polygonMinY; y <= polygonMaxY; ++y) {
-        leftPixels[y].x = SCREEN_WIDTH;
-        rightPixels[y].x = 0;
-    }
-
-    // Process each edge of the polygon.
-    for (size_t i = 0; i < vertexPixels.size(); ++i) {
-        Pixel p1 = vertexPixels[i];
-        Pixel p2 = vertexPixels[(i + 1) % vertexPixels.size()];
-
-        // Skip edges where both vertices are behind the camera.
-        if (p1.x == -1 && p2.x == -1) continue;
-
-        // If one vertex is behind the camera, we must clip the edge.
-        // A simple but effective clipping method is to find the intersection
-        // with the near plane. Since we don't have z_camera here, we use z_inv.
-        // An edge crosses the near plane if signs of (zinv - 1/z_near) differ.
-        // For simplicity, we'll clip to a z_inv slightly > 0.
-        if ((p1.x == -1) != (p2.x == -1)) {
-            if (p1.x == -1) std::swap(p1,p2); // ensure p2 is the one behind camera
-            
-            // Interpolate to find intersection point where zinv is just above zero
-            const float clip_zinv = 0.00001f;
-            float t = (clip_zinv - p1.zinv) / (p2.zinv - p1.zinv); // p2.zinv is 0 from VertexShader
-            
-            // This case is tricky because p2.zinv is 0. Avoid division by zero.
-            // A more robust solution is needed, but for now we can try to place
-            // the clipped point at the edge of the screen.
-            // However, the best fix is a more robust rasterizer that can handle large coordinates.
-        }
-
-        if (p1.y > p2.y) std::swap(p1, p2);
-
-        // Skip horizontal edges or edges entirely outside the renderable Y-range.
-        if (p1.y == p2.y || p2.y < polygonMinY || p1.y > polygonMaxY) continue;
-
-        // Determine the start and end scanlines for this edge.
-        int startY = std::max(p1.y, polygonMinY);
-        int endY = std::min(p2.y, polygonMaxY);
-        
-        float dy = p2.y - p1.y;
-        if(abs(dy) < 1e-5) continue;
-
-        // For each scanline the edge crosses, calculate the intersection point.
-        for (int y = startY; y <= endY; ++y) {
-            float t = (static_cast<float>(y) - p1.y) / dy;
-            
-            Pixel p;
-            p.y = y;
-            p.x = static_cast<int>(round(glm::mix(static_cast<float>(p1.x), static_cast<float>(p2.x), t)));
-            p.zinv = glm::mix(p1.zinv, p2.zinv, t);
-            p.pos_world_times_zinv = glm::mix(p1.pos_world_times_zinv, p2.pos_world_times_zinv, t);
-            
-            if (p.x < leftPixels[y].x) {
-                leftPixels[y] = p;
-            }
-            if (p.x > rightPixels[y].x) {
-                rightPixels[y] = p;
-            }
-        }
-    }
-}
-
-// MODIFIED FUNCTION: More robust culling logic.
-void DrawPolygonPixel(const vector<Vertex>& vertices) {
-    int V = vertices.size();
-    if (V < 3) return;
-
-    vector<Pixel> vertexPixels(V);
-    int behind_camera_count = 0;
-    
-    // Transform all vertices and count how many are behind the camera
-    for (size_t i = 0; i < vertices.size(); ++i) {
-        VertexShaderPixel(vertices[i], vertexPixels[i]);
-        if (vertexPixels[i].x == -1 && vertexPixels[i].y == -1) {
-            behind_camera_count++;
-        }
-    }
-
-    // Only cull the triangle if ALL of its vertices are behind the camera.
-    // This prevents triangles from being "chopped" when they partially cross the near plane.
-    if (behind_camera_count == V) {
-        return;
-    }
-    
     vector<Pixel> leftPixels(SCREEN_HEIGHT);
     vector<Pixel> rightPixels(SCREEN_HEIGHT);
-    
     int polygonMinY, polygonMaxY;
 
-    // Use the robust rasterizer to handle potentially off-screen coordinates
-    ComputePolygonRowsPixel(vertexPixels, leftPixels, rightPixels, polygonMinY, polygonMaxY);
+    ComputePolygonRowsPixel(projected_vertices, leftPixels, rightPixels, polygonMinY, polygonMaxY);
     
     if (polygonMinY <= polygonMaxY) {
        DrawRowsPixel(leftPixels, rightPixels, polygonMinY, polygonMaxY);
     }
 }
 
+/**
+ * @brief Draws a polygon, performing near-plane clipping before rasterization.
+ * This is the core of the stable rendering pipeline.
+ */
+void DrawPolygon(const vector<Vertex>& vertices) {
+    // 1. Transform vertices to camera space
+    vector<ProcessedVertex> initial_poly(vertices.size());
+    for(size_t i = 0; i < vertices.size(); ++i) {
+        initial_poly[i].world_pos = vertices[i].position;
+        initial_poly[i].camera_pos = R * (vertices[i].position - cameraPos);
+    }
+    
+    // 2. Clip polygon against the near plane (z = DEPTH_NEAR)
+    vector<ProcessedVertex> clipped_poly;
+    for(size_t i = 0; i < initial_poly.size(); ++i) {
+        const ProcessedVertex& prev_v = initial_poly[i];
+        const ProcessedVertex& curr_v = initial_poly[(i + 1) % initial_poly.size()];
 
+        bool prev_inside = prev_v.camera_pos.z >= DEPTH_NEAR;
+        bool curr_inside = curr_v.camera_pos.z >= DEPTH_NEAR;
+
+        if (curr_inside && prev_inside) { // Both inside, add current
+            clipped_poly.push_back(curr_v);
+        } else if (curr_inside && !prev_inside) { // Current inside, previous outside: add intersection then current
+            float t = (DEPTH_NEAR - prev_v.camera_pos.z) / (curr_v.camera_pos.z - prev_v.camera_pos.z);
+            vec3 intersection_cam = glm::mix(prev_v.camera_pos, curr_v.camera_pos, t);
+            vec3 intersection_world = glm::mix(prev_v.world_pos, curr_v.world_pos, t);
+            clipped_poly.push_back({intersection_world, intersection_cam});
+            clipped_poly.push_back(curr_v);
+        } else if (!curr_inside && prev_inside) { // Current outside, previous inside: add intersection
+            float t = (DEPTH_NEAR - prev_v.camera_pos.z) / (curr_v.camera_pos.z - prev_v.camera_pos.z);
+            vec3 intersection_cam = glm::mix(prev_v.camera_pos, curr_v.camera_pos, t);
+            vec3 intersection_world = glm::mix(prev_v.world_pos, curr_v.world_pos, t);
+            clipped_poly.push_back({intersection_world, intersection_cam});
+        }
+        // If both are outside, add nothing
+    }
+
+    // 3. If clipping results in a valid polygon, project and rasterize
+    if (clipped_poly.size() < 3) return;
+
+    // 4. Project the final clipped vertices to screen space
+    vector<Pixel> projected_vertices(clipped_poly.size());
+    for(size_t i = 0; i < clipped_poly.size(); ++i) {
+        projected_vertices[i].zinv = 1.0f / clipped_poly[i].camera_pos.z;
+        projected_vertices[i].x = static_cast<int>(round(focal * clipped_poly[i].camera_pos.x * projected_vertices[i].zinv + SCREEN_WIDTH / 2.0f));
+        projected_vertices[i].y = static_cast<int>(round(focal * clipped_poly[i].camera_pos.y * projected_vertices[i].zinv + SCREEN_HEIGHT / 2.0f));
+        projected_vertices[i].pos_world_times_zinv = clipped_poly[i].world_pos * projected_vertices[i].zinv;
+    }
+
+    // 5. Triangulate and rasterize the clipped polygon (which can be a tri or a quad)
+    RasterizeTriangle({projected_vertices[0], projected_vertices[1], projected_vertices[2]});
+    if(projected_vertices.size() == 4) {
+        RasterizeTriangle({projected_vertices[0], projected_vertices[2], projected_vertices[3]});
+    }
+}
+
+/**
+ * @brief The pixel shader, which determines the final color of a single pixel.
+ */
 void PixelShader(const Pixel& p) {
     int x = p.x;
     int y = p.y;
-
-    if (x < 0 || x >= SCREEN_WIDTH || y < 0 || y >= SCREEN_HEIGHT) {
-        return;
-    }
+    if (x < 0 || x >= SCREEN_WIDTH || y < 0 || y >= SCREEN_HEIGHT) return;
 
     if (p.zinv > depthBuffer[y][x]) {
         depthBuffer[y][x] = p.zinv;
         
         vec3 actual_pixel_world_pos;
         if (abs(p.zinv) < 1e-9) {
-             sdlAux->putPixelWithCapture(x, y, vec3(0.1,0.1,0.1));
+             sdlAux->putPixelWithCapture(x, y, vec3(0.0));
              return;
         } else {
             actual_pixel_world_pos = p.pos_world_times_zinv / p.zinv;
@@ -1012,17 +867,7 @@ void PixelShader(const Pixel& p) {
             if (invert_depth_map) {
                 normalized_depth = 1.0f - normalized_depth;
             }
-            
-            float gray_value = 1.0f - normalized_depth;
-            
-            if (gray_value < 0.3f) {
-                final_color = vec3(gray_value * 0.5f, gray_value * 0.5f, gray_value + 0.3f);
-            } else if (gray_value > 0.8f) {
-                final_color = vec3(gray_value + 0.2f, gray_value * 0.5f, gray_value * 0.5f);
-            } else {
-                final_color = vec3(gray_value, gray_value, gray_value);
-            }
-            
+            final_color = vec3(1.0f - normalized_depth);
         } else {
             vec3 s = lightPos - actual_pixel_world_pos;
             float dist_sq = glm::dot(s, s);
@@ -1033,7 +878,6 @@ void PixelShader(const Pixel& p) {
                 float cos_theta = glm::max(0.0f, glm::dot(currentTriangleNormal_world, s_normalized));
                 illumination_direct = (lightPower * cos_theta) / (4.0f * MY_PI * dist_sq);
             }
-            
             final_color = currentColor * (illumination_direct + indirectLightPowerPerArea);
         }
         
@@ -1042,34 +886,33 @@ void PixelShader(const Pixel& p) {
     }
 }
 
+// --------------------------------------------------------------------------
+//
+// END OF RE-ENGINEERED RENDERING FUNCTIONS
+//
+// --------------------------------------------------------------------------
+
 void Draw() {
     for (int r = 0; r < SCREEN_HEIGHT; ++r) {
         for (int c = 0; c < SCREEN_WIDTH; ++c) {
             depthBuffer[r][c] = 0.0f;
             
-            vec3 background_color;
-            if (display_depth_buffer) {
-                background_color = vec3(0.0f, 0.0f, 0.0f);
-            } else {
-                float gradient_factor = static_cast<float>(r) / static_cast<float>(SCREEN_HEIGHT - 1);
-                vec3 sky_top = vec3(0.5f, 0.7f, 1.0f);
-                vec3 sky_bottom = vec3(1.0f, 1.0f, 1.0f);
-                background_color = glm::mix(sky_top, sky_bottom, gradient_factor);
-            }
+            vec3 background_color = display_depth_buffer ? vec3(0.0f) :
+                glm::mix(vec3(0.5f, 0.7f, 1.0f), vec3(0.8f, 0.9f, 1.0f), (float)r / SCREEN_HEIGHT);
             sdlAux->putPixelWithCapture(c, r, background_color);
         }
     }
 
-    for (size_t i = 0; i < triangles.size(); ++i) {
+    for (const auto& tri : triangles) {
         vector<Vertex> polygon_vertices(3);
-        polygon_vertices[0].position = triangles[i].v0;
-        polygon_vertices[1].position = triangles[i].v1;
-        polygon_vertices[2].position = triangles[i].v2;
+        polygon_vertices[0].position = tri.v0;
+        polygon_vertices[1].position = tri.v1;
+        polygon_vertices[2].position = tri.v2;
         
-        currentTriangleNormal_world = triangles[i].normal;
-        currentColor = triangles[i].color;
+        currentTriangleNormal_world = tri.normal;
+        currentColor = tri.color;
 
-        DrawPolygonPixel(polygon_vertices);
+        DrawPolygon(polygon_vertices);
     }
 
     sdlAux->render();
