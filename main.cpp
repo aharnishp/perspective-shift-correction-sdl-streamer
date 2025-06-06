@@ -30,6 +30,7 @@
 
 using namespace std;
 using glm::vec3;
+using glm::vec2;
 using glm::mat3;
 using glm::ivec2;
 
@@ -111,9 +112,9 @@ const float MY_PI = 3.141592653f;
 
 // Depth buffer configuration
 const float DEPTH_NEAR = 0.1f;          // Near clipping plane
-const float DEPTH_FAR = 100.0f;         // Far clipping plane
-const float DEPTH_SCALE_8BIT = 1000.0f; // Convert to millimeters
-const float MAX_DEPTH_8BIT_MM = 16000.0f; // 8 meters in millimeters
+const float DEPTH_FAR = 400.0f;         // Far clipping plane
+const float DEPTH_SCALE_8BIT = 128.0f; // Convert to millimeters
+const float MAX_DEPTH_8BIT_MM = 500.0f; // 8 meters in millimeters
 
 // === Global Variables ===
 ExtendedSDL2Aux *sdlAux;
@@ -132,6 +133,11 @@ float yaw = 0.0f;
 float pitch = 0.0f;
 float focal = (SCREEN_HEIGHT + SCREEN_WIDTH) * (0.125f);
 
+// Fisheye projection parameters
+float field_of_view = 180.0f; // Field of view in degrees (adjustable)
+float fisheye_radius = std::min(SCREEN_WIDTH, SCREEN_HEIGHT) * 0.4f; // Fisheye circle radius
+glm::vec2 fisheye_center = glm::vec2(SCREEN_WIDTH * 0.5f, SCREEN_HEIGHT * 0.5f); // Center of fisheye
+
 // === 6DoF Camera Control System ===
 // Manual control state
 bool manual_control_active = false;
@@ -141,12 +147,13 @@ vec3 manual_position_offset(0.0f);
 std::chrono::steady_clock::time_point last_mouse_movement;
 
 // Base pose from VR tracking
-vec3 base_position(0, 0, -3.001);
+vec3 base_position(0, 0, -1.001);
 glm::quat base_rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
 bool use_tracking_pose = true;
 
 // Store original world pose for metadata (not converted to our coordinate system)
-vec3 world_position = vec3(0.0f, 0.0f, 3.0f);
+vec3 world_position = vec3(2.0f, 2.0f, 7.0f);
+// vec3 world_position = vec3(0.0f, 0.0f, 3.0f);
 glm::quat world_rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
 bool has_world_pose = false;
 
@@ -333,6 +340,9 @@ void convertDepthBufferTo8Bit(std::vector<uint8_t>& depth_8bit) {
                 } else {
                     depth_8bit[idx] = depth_value;
                 }
+                
+                // Always invert for network transmission: 1 becomes 255, 255 becomes 1
+                depth_8bit[idx] = 256 - depth_8bit[idx];
             }
         }
     }
@@ -527,6 +537,62 @@ void updateCameraPose() {
     }
 }
 
+// === Fisheye Projection Functions ===
+glm::vec2 worldToFisheye(const vec3& world_pos) {
+    vec3 cam_pos = R * (world_pos - cameraPos);
+    
+    // Skip points behind camera (use smaller epsilon for near clipping)
+    if (cam_pos.z >= -0.001f) {
+        return glm::vec2(-1, -1); // Invalid coordinate
+    }
+    
+    // Convert to spherical coordinates
+    float theta = atan2(sqrt(cam_pos.x * cam_pos.x + cam_pos.y * cam_pos.y), -cam_pos.z);
+    float phi = atan2(cam_pos.y, cam_pos.x);
+    
+    // Apply field of view scaling
+    float max_theta = glm::radians(field_of_view * 0.5f);
+    if (theta > max_theta) {
+        return glm::vec2(-1, -1); // Outside field of view
+    }
+    
+    // Fisheye projection: map theta to radius
+    float fisheye_r = (theta / max_theta) * fisheye_radius;
+    
+    // Convert back to Cartesian coordinates
+    float screen_x = fisheye_center.x + fisheye_r * cos(phi);
+    float screen_y = fisheye_center.y + fisheye_r * sin(phi);
+    
+    return glm::vec2(screen_x, screen_y);
+}
+
+vec3 fisheyeToWorld(int screen_x, int screen_y) {
+    // Convert screen coordinates to fisheye coordinates
+    float dx = screen_x - fisheye_center.x;
+    float dy = screen_y - fisheye_center.y;
+    float r = sqrt(dx * dx + dy * dy);
+    
+    // Check if point is outside fisheye circle
+    if (r > fisheye_radius) {
+        return vec3(0, 0, 1); // Return invalid direction (behind camera)
+    }
+    
+    // Convert to spherical coordinates
+    float phi = atan2(dy, dx);
+    float max_theta = glm::radians(field_of_view * 0.5f);
+    float theta = (r / fisheye_radius) * max_theta;
+    
+    // Convert to Cartesian coordinates in camera space
+    vec3 cam_dir;
+    cam_dir.x = sin(theta) * cos(phi);
+    cam_dir.y = sin(theta) * sin(phi);
+    cam_dir.z = -cos(theta); // Negative because we're looking down -Z
+    
+    // Transform to world space
+    mat3 cameraToWorld = glm::transpose(R);
+    return cameraToWorld * cam_dir;
+}
+
 // === Renderer Functions ===
 void Update(void);
 void Draw(void);
@@ -551,6 +617,21 @@ void Update(void) {
     bool keyboard_input = (keystate[SDL_SCANCODE_W] || keystate[SDL_SCANCODE_S] || 
                           keystate[SDL_SCANCODE_A] || keystate[SDL_SCANCODE_D] || 
                           keystate[SDL_SCANCODE_SPACE] || keystate[SDL_SCANCODE_LCTRL]);
+    
+    // Field of view control
+    static bool minus_key_was_pressed = false;
+    if (keystate[SDL_SCANCODE_MINUS] && !minus_key_was_pressed) {
+        field_of_view = glm::clamp(field_of_view - 10.0f, 60.0f, 360.0f);
+        std::cout << "[Fisheye] Field of view: " << field_of_view << " degrees" << std::endl;
+    }
+    minus_key_was_pressed = keystate[SDL_SCANCODE_MINUS];
+    
+    static bool equals_key_was_pressed = false;
+    if (keystate[SDL_SCANCODE_EQUALS] && !equals_key_was_pressed) {
+        field_of_view = glm::clamp(field_of_view + 10.0f, 60.0f, 360.0f);
+        std::cout << "[Fisheye] Field of view: " << field_of_view << " degrees" << std::endl;
+    }
+    equals_key_was_pressed = keystate[SDL_SCANCODE_EQUALS];
     
     static bool p_key_was_pressed = false;
     if (keystate[SDL_SCANCODE_P] && !p_key_was_pressed) {
@@ -784,7 +865,7 @@ void RasterizeTriangle(const vector<Pixel>& projected_vertices) {
 
 /**
  * @brief Draws a polygon, performing near-plane clipping before rasterization.
- * This is the core of the stable rendering pipeline.
+ * This is the core of the stable rendering pipeline with fisheye projection.
  */
 void DrawPolygon(const vector<Vertex>& vertices) {
     // 1. Transform vertices to camera space
@@ -800,39 +881,53 @@ void DrawPolygon(const vector<Vertex>& vertices) {
         const ProcessedVertex& prev_v = initial_poly[i];
         const ProcessedVertex& curr_v = initial_poly[(i + 1) % initial_poly.size()];
 
-        bool prev_inside = prev_v.camera_pos.z >= DEPTH_NEAR;
-        bool curr_inside = curr_v.camera_pos.z >= DEPTH_NEAR;
+        bool prev_inside = prev_v.camera_pos.z <= -DEPTH_NEAR; // Note: negative Z for forward
+        bool curr_inside = curr_v.camera_pos.z <= -DEPTH_NEAR;
 
-        if (curr_inside && prev_inside) { // Both inside, add current
+        if (curr_inside && prev_inside) {
             clipped_poly.push_back(curr_v);
-        } else if (curr_inside && !prev_inside) { // Current inside, previous outside: add intersection then current
-            float t = (DEPTH_NEAR - prev_v.camera_pos.z) / (curr_v.camera_pos.z - prev_v.camera_pos.z);
+        } else if (curr_inside && !prev_inside) {
+            float t = (-DEPTH_NEAR - prev_v.camera_pos.z) / (curr_v.camera_pos.z - prev_v.camera_pos.z);
             vec3 intersection_cam = glm::mix(prev_v.camera_pos, curr_v.camera_pos, t);
             vec3 intersection_world = glm::mix(prev_v.world_pos, curr_v.world_pos, t);
             clipped_poly.push_back({intersection_world, intersection_cam});
             clipped_poly.push_back(curr_v);
-        } else if (!curr_inside && prev_inside) { // Current outside, previous inside: add intersection
-            float t = (DEPTH_NEAR - prev_v.camera_pos.z) / (curr_v.camera_pos.z - prev_v.camera_pos.z);
+        } else if (!curr_inside && prev_inside) {
+            float t = (-DEPTH_NEAR - prev_v.camera_pos.z) / (curr_v.camera_pos.z - prev_v.camera_pos.z);
             vec3 intersection_cam = glm::mix(prev_v.camera_pos, curr_v.camera_pos, t);
             vec3 intersection_world = glm::mix(prev_v.world_pos, curr_v.world_pos, t);
             clipped_poly.push_back({intersection_world, intersection_cam});
         }
-        // If both are outside, add nothing
     }
 
-    // 3. If clipping results in a valid polygon, project and rasterize
     if (clipped_poly.size() < 3) return;
 
-    // 4. Project the final clipped vertices to screen space
-    vector<Pixel> projected_vertices(clipped_poly.size());
+    // 3. Project vertices using fisheye projection
+    vector<Pixel> projected_vertices;
+    bool all_vertices_valid = true;
+    
     for(size_t i = 0; i < clipped_poly.size(); ++i) {
-        projected_vertices[i].zinv = 1.0f / clipped_poly[i].camera_pos.z;
-        projected_vertices[i].x = static_cast<int>(round(focal * clipped_poly[i].camera_pos.x * projected_vertices[i].zinv + SCREEN_WIDTH / 2.0f));
-        projected_vertices[i].y = static_cast<int>(round(focal * clipped_poly[i].camera_pos.y * projected_vertices[i].zinv + SCREEN_HEIGHT / 2.0f));
-        projected_vertices[i].pos_world_times_zinv = clipped_poly[i].world_pos * projected_vertices[i].zinv;
+        glm::vec2 screen_pos = worldToFisheye(clipped_poly[i].world_pos);
+        
+        // Check if vertex is valid and within screen bounds
+        if (screen_pos.x < 0 || screen_pos.y < 0 || 
+            screen_pos.x >= SCREEN_WIDTH || screen_pos.y >= SCREEN_HEIGHT) {
+            all_vertices_valid = false;
+            break;
+        }
+        
+        Pixel p;
+        p.x = static_cast<int>(round(screen_pos.x));
+        p.y = static_cast<int>(round(screen_pos.y));
+        p.zinv = 1.0f / (-clipped_poly[i].camera_pos.z); // Note: negative Z
+        p.pos_world_times_zinv = clipped_poly[i].world_pos * p.zinv;
+        projected_vertices.push_back(p);
     }
+    
+    // Only render if all vertices are valid
+    if (!all_vertices_valid || projected_vertices.size() < 3) return;
 
-    // 5. Triangulate and rasterize the clipped polygon (which can be a tri or a quad)
+    // 4. Triangulate and rasterize
     RasterizeTriangle({projected_vertices[0], projected_vertices[1], projected_vertices[2]});
     if(projected_vertices.size() == 4) {
         RasterizeTriangle({projected_vertices[0], projected_vertices[2], projected_vertices[3]});
@@ -897,8 +992,25 @@ void Draw() {
         for (int c = 0; c < SCREEN_WIDTH; ++c) {
             depthBuffer[r][c] = 0.0f;
             
-            vec3 background_color = display_depth_buffer ? vec3(0.0f) :
-                glm::mix(vec3(0.5f, 0.7f, 1.0f), vec3(0.8f, 0.9f, 1.0f), (float)r / SCREEN_HEIGHT);
+            // Create fisheye background
+            vec3 background_color;
+            if (display_depth_buffer) {
+                background_color = vec3(0.0f);
+            } else {
+                // Check if pixel is within fisheye circle
+                float dx = c - fisheye_center.x;
+                float dy = r - fisheye_center.y;
+                float dist_from_center = sqrt(dx * dx + dy * dy);
+                
+                if (dist_from_center <= fisheye_radius) {
+                    // Inside fisheye circle - use sky gradient
+                    float normalized_dist = dist_from_center / fisheye_radius;
+                    background_color = glm::mix(vec3(0.5f, 0.7f, 1.0f), vec3(0.8f, 0.9f, 1.0f), normalized_dist);
+                } else {
+                    // Outside fisheye circle - use black
+                    background_color = vec3(0.0f);
+                }
+            }
             sdlAux->putPixelWithCapture(c, r, background_color);
         }
     }
