@@ -90,8 +90,8 @@ struct Vertex {
 // === Configuration ===
 const int SCREEN_WIDTH = 1500;
 const int SCREEN_HEIGHT = 1500;
-// const char* TARGET_IP = "192.168.31.144";
-const char* TARGET_IP = "127.0.0.1";
+const char* TARGET_IP = "192.168.31.144";
+// const char* TARGET_IP = "127.0.0.1";
 const unsigned short TARGET_PORT = 8051;
 const int JPEG_QUALITY = 75;
 const int SEND_INTERVAL_MS = 33; // ~30 FPS
@@ -105,7 +105,8 @@ const float MY_PI = 3.141592653f;
 // Depth buffer configuration
 const float DEPTH_NEAR = 0.1f;          // Near clipping plane
 const float DEPTH_FAR = 100.0f;         // Far clipping plane
-const float DEPTH_SCALE = (1000.0f/8000.0f);      // Convert to millimeters
+const float DEPTH_SCALE_8BIT = 1000.0f; // Convert to millimeters
+const float MAX_DEPTH_8BIT_MM = 8000.0f; // 8 meters in millimeters
 
 // === Global Variables ===
 ExtendedSDL2Aux *sdlAux;
@@ -328,8 +329,8 @@ void extractRGBFromSDL(ExtendedSDL2Aux* sdlAux, std::vector<unsigned char>& rgb_
     sdlAux->extractRGBBuffer(rgb_buffer);
 }
 
-void convertDepthBufferTo16Bit(std::vector<uint16_t>& depth_16bit) {
-    depth_16bit.resize(SCREEN_WIDTH * SCREEN_HEIGHT);
+void convertDepthBufferTo8Bit(std::vector<uint8_t>& depth_8bit) {
+    depth_8bit.resize(SCREEN_WIDTH * SCREEN_HEIGHT);
     
     for (int y = 0; y < SCREEN_HEIGHT; ++y) {
         for (int x = 0; x < SCREEN_WIDTH; ++x) {
@@ -341,7 +342,7 @@ void convertDepthBufferTo16Bit(std::vector<uint16_t>& depth_16bit) {
             // Check for sky/background pixels (zinv == 0 means no geometry was rendered there)
             if (zinv <= 0.0f) {
                 // Sky/infinite depth - set to 0 to indicate infinite distance
-                depth_16bit[idx] = 0;
+                depth_8bit[idx] = 0;
             } else {
                 // Convert from 1/z to actual depth distance
                 float depth_world = 1.0f / zinv;
@@ -349,20 +350,26 @@ void convertDepthBufferTo16Bit(std::vector<uint16_t>& depth_16bit) {
                 // Clamp depth to reasonable range before scaling
                 depth_world = glm::clamp(depth_world, DEPTH_NEAR, DEPTH_FAR);
                 
-                // Convert to millimeters and clamp to 16-bit range
-                uint32_t depth_mm = static_cast<uint32_t>(depth_world * DEPTH_SCALE);
-                uint16_t depth_value = static_cast<uint16_t>(std::min(depth_mm, static_cast<uint32_t>(65535)));
+                // Convert to millimeters
+                float depth_mm = depth_world * DEPTH_SCALE_8BIT;
+                
+                // Scale to 8-bit range: 8 meters (8000mm) maps to 255
+                float normalized_depth = depth_mm / MAX_DEPTH_8BIT_MM;
+                
+                // Clamp to [0, 1] range and convert to 8-bit
+                normalized_depth = glm::clamp(normalized_depth, 0.0f, 1.0f);
+                uint8_t depth_value = static_cast<uint8_t>(normalized_depth * 255.0f);
                 
                 // Ensure we don't accidentally use 0 for actual geometry (reserve 0 for infinite)
-                if (depth_value == 0) {
+                if (depth_value == 0 && zinv > 0.0f) {
                     depth_value = 1; // Minimum non-infinite depth value
                 }
                 
                 // Apply depth inversion if enabled
                 if (invert_depth_map) {
-                    depth_16bit[idx] = 65535 - depth_value;
+                    depth_8bit[idx] = 255 - depth_value;
                 } else {
-                    depth_16bit[idx] = depth_value;
+                    depth_8bit[idx] = depth_value;
                 }
             }
         }
@@ -511,12 +518,13 @@ void streamFrame() {
         std::cerr << "[Stream Error] Failed to encode JPEG" << std::endl;
     }
 
-    std::vector<uint16_t> depth_16bit;
-    convertDepthBufferTo16Bit(depth_16bit);
+    // Convert depth buffer to 8-bit format
+    std::vector<uint8_t> depth_8bit;
+    convertDepthBufferTo8Bit(depth_8bit);
     
-    if (!depth_16bit.empty()) {
-        const unsigned char* depth_data = reinterpret_cast<const unsigned char*>(depth_16bit.data());
-        size_t depth_size = depth_16bit.size() * sizeof(uint16_t);
+    if (!depth_8bit.empty()) {
+        const unsigned char* depth_data = reinterpret_cast<const unsigned char*>(depth_8bit.data());
+        size_t depth_size = depth_8bit.size() * sizeof(uint8_t);
         sendDataPackets(depth_data, depth_size, 1);
     } else {
         std::cerr << "[Stream Error] Depth buffer is empty" << std::endl;

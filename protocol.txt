@@ -32,28 +32,29 @@ From the streamer to the receiver (Port 8051):
 
 - Depth Buffer Data (streamed at ~30 FPS / every 33ms):
   * Image Resolution: 1500x1500 pixels
-  * Format: 16-bit unsigned integers (little-endian)
-  * Values: Physically accurate depth in millimeters
+  * Format: 8-bit unsigned integers (single byte per pixel)
+  * Values: Depth scaled to 8-meter range
     - 0 = invalid/infinite depth (sky/background)
-    - 1-65535 = valid depth in millimeters (0.001m to 65.535m)
-  * Conversion: From 1/z depth buffer to world space distance * 1000 (mm)
-  * Data size: 4,500,000 bytes per frame (1500 x 1500 x 2 bytes)
-  * Physical accuracy: 1mm precision, suitable for parallax occlusion mapping
+    - 1-255 = valid depth scaled from 0-8000mm (0-8 meters)
+    - Values beyond 8 meters are clamped to 255 in C++ streamer
+  * Conversion: From 1/z depth buffer to world space distance, scaled to 8m range
+  * Data size: 2,250,000 bytes per frame (1500 x 1500 x 1 byte)
+  * Precision: ~31.37mm per step (8000mm / 255 steps)
   
-  Unity Texture Format: R16 (16-bit single channel)
-  - Each texel represents depth in millimeters
-  - Normalized range: 0.0 (0mm) to 1.0 (65535mm)
-  - For shader use: texture_value * 65535.0 = depth_in_millimeters
+  Unity Texture Format: R8 (8-bit single channel) or RGB24 (for visualization)
+  - Each texel represents depth scaled to 8-meter range
+  - Normalized range: 0.0 (0mm) to 1.0 (8000mm)
+  - For shader use: texture_value * 8000.0 = depth_in_millimeters
   
   UDP Packet Structure (same header as JPEG):
   * Header (13 bytes, network byte order):
     - frameId (4 bytes): uint32_t frame counter
     - chunkIndex (4 bytes): uint32_t current chunk number (0-based)
     - totalChunks (4 bytes): uint32_t total chunks for this frame
-    - dataType (1 byte): uint8_t (1 = raw 16-bit depth buffer)
+    - dataType (1 byte): uint8_t (1 = raw 8-bit depth buffer)
   
-  * Payload: Raw binary depth data (16-bit values, little-endian)
-  * Fragmentation: Large depth frames split across multiple packets
+  * Payload: Raw binary depth data (8-bit values, 1 byte per pixel)
+  * Fragmentation: Depth frames split across multiple packets
 
 
 
