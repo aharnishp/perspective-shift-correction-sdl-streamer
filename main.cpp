@@ -90,8 +90,8 @@ struct Vertex {
 // === Configuration ===
 const int SCREEN_WIDTH = 1500;
 const int SCREEN_HEIGHT = 1500;
-const char* TARGET_IP = "192.168.31.144";
-// const char* TARGET_IP = "127.0.0.1";
+// const char* TARGET_IP = "192.168.31.144";
+const char* TARGET_IP = "127.0.0.1";
 const unsigned short TARGET_PORT = 8051;
 const int JPEG_QUALITY = 75;
 const int SEND_INTERVAL_MS = 33; // ~30 FPS
@@ -105,7 +105,7 @@ const float MY_PI = 3.141592653f;
 // Depth buffer configuration
 const float DEPTH_NEAR = 0.1f;          // Near clipping plane
 const float DEPTH_FAR = 100.0f;         // Far clipping plane
-const float DEPTH_SCALE = 1000.0f;      // Convert to millimeters
+const float DEPTH_SCALE = (1000.0f/8000.0f);      // Convert to millimeters
 
 // === Global Variables ===
 ExtendedSDL2Aux *sdlAux;
@@ -113,6 +113,9 @@ int t;
 vector<Triangle> triangles;
 float depthBuffer[SCREEN_HEIGHT][SCREEN_WIDTH];
 std::atomic<bool> keep_running(true);
+
+// Streaming control
+std::atomic<bool> streaming_paused(false);
 
 // Camera
 vec3 cameraPos(0, 0, -3.001);
@@ -143,23 +146,13 @@ bool has_world_pose = false;
 bool invert_depth_map = false;
 bool display_depth_buffer = false;  // New flag to display depth buffer instead of color
 
-// // VR rotation inversion toggles (global settings for tracked mode)
-// bool invert_pitch = false;  // X-axis rotation
-// bool invert_yaw = false;    // Y-axis rotation  
-// bool invert_roll = false;   // Z-axis rotation
-
-// // VR translation inversion toggles (global settings for tracked mode)
-// bool invert_pos_x = false;  // X-axis translation
-// bool invert_pos_y = false;  // Y-axis translation
-// bool invert_pos_z = false;  // Z-axis translation
-
 // VR rotation inversion toggles (global settings for tracked mode)
 bool invert_pitch = false;  // X-axis rotation
-bool invert_yaw = false;    // Y-axis rotation  
-bool invert_roll = false;   // Z-axis rotation
+bool invert_yaw = true;    // Y-axis rotation  
+bool invert_roll = true;   // Z-axis rotation
 
 // VR translation inversion toggles (global settings for tracked mode)
-bool invert_pos_x = true;  // X-axis translation
+bool invert_pos_x = false;  // X-axis translation
 bool invert_pos_y = true;  // Y-axis translation
 bool invert_pos_z = true;  // Z-axis translation
 
@@ -349,7 +342,6 @@ void convertDepthBufferTo16Bit(std::vector<uint16_t>& depth_16bit) {
             if (zinv <= 0.0f) {
                 // Sky/infinite depth - set to 0 to indicate infinite distance
                 depth_16bit[idx] = 0;
-                // depth_16bit[idx] = UINT16_MAX;
             } else {
                 // Convert from 1/z to actual depth distance
                 float depth_world = 1.0f / zinv;
@@ -397,49 +389,32 @@ bool initializeStreaming() {
     return true;
 }
 
-// Helper function to get current frame metadata (timestamp and camera pose)
 FrameMetadata getCurrentFrameMetadata() {
     FrameMetadata metadata;
     
-    // Get current timestamp in microseconds since epoch
     auto now = std::chrono::system_clock::now();
     auto duration = now.time_since_epoch();
     metadata.timestamp_us = std::chrono::duration_cast<std::chrono::microseconds>(duration).count();
     
-    // Use the original world pose if available (maintains world coordinates throughout pipeline)
     if (has_world_pose) {
-        // Send back the original world pose exactly as received from Unity
-        // This maintains consistency in the coordinate reference frame
         metadata.cam_pos_x = world_position.x;
         metadata.cam_pos_y = world_position.y;
-        metadata.cam_pos_z = world_position.z;  // Keep original world coordinates
+        metadata.cam_pos_z = world_position.z;
         
-        // Send back the original world rotation exactly as received from Unity
         metadata.cam_rot_x = world_rotation.x;
         metadata.cam_rot_y = world_rotation.y;
-        metadata.cam_rot_z = world_rotation.z;  // Keep original world coordinates
+        metadata.cam_rot_z = world_rotation.z;
         metadata.cam_rot_w = world_rotation.w;
     } else {
-        // Fallback to current camera pose (convert from our coordinate system to Unity world coordinates)
-        // Our system: Y-up, Z-backward, X-right (right-handed)
-        // Unity world: Y-up, Z-forward, X-right (left-handed)
-        // 
-        // IMPORTANT: Send the actual camera pose in Unity world coordinates, 
-        // NOT the "un-inverted" version. The inversions are user preferences
-        // for input handling, but the output pose should match what was rendered.
         metadata.cam_pos_x = cameraPos.x;
         metadata.cam_pos_y = cameraPos.y;
-        metadata.cam_pos_z = -cameraPos.z;  // Convert Z from our backward system to Unity's forward system
+        metadata.cam_pos_z = -cameraPos.z;
         
-        // Convert rotation matrix back to quaternion and then to Unity coordinates
         glm::quat cam_quat = glm::quat_cast(R);
         
-        // Convert quaternion from our coordinate system to Unity's
-        // Our system: Y-up, Z-backward, X-right (right-handed)
-        // Unity world: Y-up, Z-forward, X-right (left-handed)
         metadata.cam_rot_x = cam_quat.x;
         metadata.cam_rot_y = cam_quat.y;
-        metadata.cam_rot_z = -cam_quat.z;  // Invert Z component for coordinate system conversion
+        metadata.cam_rot_z = -cam_quat.z;
         metadata.cam_rot_w = cam_quat.w;
     }
     
@@ -447,15 +422,13 @@ FrameMetadata getCurrentFrameMetadata() {
 }
 
 bool sendDataPackets(const unsigned char* data, size_t data_size, uint8_t data_type) {
-    // Calculate total chunks considering metadata in first chunk
     size_t first_chunk_data_size = std::min(data_size, static_cast<size_t>(MAX_FIRST_CHUNK_DATA_SIZE));
     size_t remaining_data_size = data_size - first_chunk_data_size;
-    uint32_t total_chunks = 1; // At least one chunk for first chunk with metadata
+    uint32_t total_chunks = 1;
     if (remaining_data_size > 0) {
         total_chunks += (remaining_data_size + MAX_CHUNK_DATA_SIZE - 1) / MAX_CHUNK_DATA_SIZE;
     }
     
-    // Get frame metadata for first packet
     FrameMetadata metadata = getCurrentFrameMetadata();
 
     std::vector<unsigned char> packet_buffer(MAX_UDP_PACKET_SIZE);
@@ -463,7 +436,7 @@ bool sendDataPackets(const unsigned char* data, size_t data_size, uint8_t data_t
     
     header->frameId = htonl(frame_count);
     header->totalChunks = htonl(total_chunks);
-    header->dataType = data_type; // 0 for JPEG, 1 for depth
+    header->dataType = data_type;
 
     size_t bytes_remaining = data_size;
     const unsigned char* data_ptr = data;
@@ -474,11 +447,9 @@ bool sendDataPackets(const unsigned char* data, size_t data_size, uint8_t data_t
         int packet_size = HEADER_SIZE;
         
         if (chunk_idx == 0) {
-            // First chunk: include metadata
             memcpy(packet_buffer.data() + HEADER_SIZE, &metadata, METADATA_SIZE);
             packet_size += METADATA_SIZE;
             
-            // Add first chunk of data after metadata
             if (bytes_remaining > 0) {
                 int current_chunk_data_size = std::min(static_cast<size_t>(MAX_FIRST_CHUNK_DATA_SIZE), bytes_remaining);
                 memcpy(packet_buffer.data() + HEADER_SIZE + METADATA_SIZE, data_ptr, current_chunk_data_size);
@@ -487,7 +458,6 @@ bool sendDataPackets(const unsigned char* data, size_t data_size, uint8_t data_t
                 bytes_remaining -= current_chunk_data_size;
             }
         } else {
-            // Subsequent chunks: data only
             int current_chunk_data_size = std::min(static_cast<size_t>(MAX_CHUNK_DATA_SIZE), bytes_remaining);
             memcpy(packet_buffer.data() + HEADER_SIZE, data_ptr, current_chunk_data_size);
             packet_size += current_chunk_data_size;
@@ -515,90 +485,39 @@ bool sendDataPackets(const unsigned char* data, size_t data_size, uint8_t data_t
 }
 
 void streamFrame() {
+    // Check if streaming is paused
+    if (streaming_paused.load()) {
+        return; // Skip streaming this frame
+    }
+    
     frame_count++;
     
-    // Extract RGB data from SDL buffer
     std::vector<unsigned char> rgb_buffer;
     extractRGBFromSDL(sdlAux, rgb_buffer);
     
-    // Debug: Print RGB buffer info
-    if (frame_count % 30 == 1) { // Print every 30 frames
-        std::cout << "[Stream Debug] RGB buffer size: " << rgb_buffer.size() 
-                  << " bytes (expected: " << (SCREEN_WIDTH * SCREEN_HEIGHT * 3) << ")" << std::endl;
-    }
-    
-    // Encode as JPEG
     MemoryBuffer jpeg_buffer;
     int jpeg_success = stbi_write_jpg_to_func(
         write_memory_buffer,
         &jpeg_buffer,
         SCREEN_WIDTH, SCREEN_HEIGHT,
-        3, // RGB channels
+        3,
         rgb_buffer.data(),
         JPEG_QUALITY
     );
 
-    // Send color JPEG data
     if (jpeg_success && jpeg_buffer.data && jpeg_buffer.size > 0) {
-        if (frame_count % 30 == 1) {
-            std::cout << "[Stream Debug] JPEG encoded size: " << jpeg_buffer.size << " bytes" << std::endl;
-        }
-        sendDataPackets(jpeg_buffer.data, jpeg_buffer.size, 0); // 0 = JPEG color
+        sendDataPackets(jpeg_buffer.data, jpeg_buffer.size, 0);
     } else {
         std::cerr << "[Stream Error] Failed to encode JPEG" << std::endl;
     }
 
-    // Convert and send depth data
     std::vector<uint16_t> depth_16bit;
     convertDepthBufferTo16Bit(depth_16bit);
     
-    // Debug: Print depth buffer info and sample values with detailed analysis
-    if (frame_count % 30 == 1) {
-        std::cout << "[Stream Debug] Depth buffer size: " << depth_16bit.size() 
-                  << " values (" << (depth_16bit.size() * sizeof(uint16_t)) << " bytes)" << std::endl;
-        
-        // Sample some depth values for debugging with more detail
-        uint32_t zero_count = 0;
-        uint32_t non_zero_count = 0;
-        uint32_t min_depth = 65535, max_depth = 0;
-        uint32_t depth_histogram[10] = {0}; // 10 bins for depth distribution
-        
-        for (size_t i = 0; i < depth_16bit.size(); i++) {
-            uint16_t depth_val = depth_16bit[i];
-            if (depth_val == 0) {
-                zero_count++;
-            } else {
-                non_zero_count++;
-                min_depth = std::min(min_depth, static_cast<uint32_t>(depth_val));
-                max_depth = std::max(max_depth, static_cast<uint32_t>(depth_val));
-                
-                // Add to histogram
-                int bin = std::min(9, static_cast<int>(depth_val / 6553)); // 0-65535 divided into 10 bins
-                depth_histogram[bin]++;
-            }
-        }
-        
-        std::cout << "[Stream Debug] Depth analysis:" << std::endl;
-        std::cout << "  Zero pixels (sky): " << zero_count << " (" << (zero_count * 100 / depth_16bit.size()) << "%)" << std::endl;
-        std::cout << "  Non-zero pixels: " << non_zero_count << " (" << (non_zero_count * 100 / depth_16bit.size()) << "%)" << std::endl;
-        if (non_zero_count > 0) {
-            std::cout << "  Depth range: " << min_depth << " - " << max_depth << " mm" << std::endl;
-            std::cout << "  World depth range: " << (min_depth / DEPTH_SCALE) << " - " << (max_depth / DEPTH_SCALE) << " units" << std::endl;
-            
-            // Print histogram
-            std::cout << "  Depth distribution (bins): ";
-            for (int i = 0; i < 10; i++) {
-                std::cout << depth_histogram[i] << " ";
-            }
-            std::cout << std::endl;
-        }
-    }
-    
-    // Send depth data as raw binary (16-bit values)
     if (!depth_16bit.empty()) {
         const unsigned char* depth_data = reinterpret_cast<const unsigned char*>(depth_16bit.data());
         size_t depth_size = depth_16bit.size() * sizeof(uint16_t);
-        sendDataPackets(depth_data, depth_size, 1); // 1 = depth data
+        sendDataPackets(depth_data, depth_size, 1);
     } else {
         std::cerr << "[Stream Error] Depth buffer is empty" << std::endl;
     }
@@ -606,24 +525,7 @@ void streamFrame() {
 
 // === 6DoF Camera Helper Functions ===
 mat3 quaternionToRotationMatrix(const glm::quat& q) {
-    // Convert quaternion to rotation matrix
-    // Unity uses left-handed coordinates, we may need to adjust
-    float x = q.x, y = q.y, z = q.z, w = q.w;
-    
-    mat3 result;
-    result[0][0] = 1.0f - 2.0f * (y*y + z*z);
-    result[0][1] = 2.0f * (x*y - w*z);
-    result[0][2] = 2.0f * (x*z + w*y);
-    
-    result[1][0] = 2.0f * (x*y + w*z);
-    result[1][1] = 1.0f - 2.0f * (x*x + z*z);
-    result[1][2] = 2.0f * (y*z - w*x);
-    
-    result[2][0] = 2.0f * (x*z - w*y);
-    result[2][1] = 2.0f * (y*z + w*x);
-    result[2][2] = 1.0f - 2.0f * (x*x + y*y);
-    
-    return result;
+    return glm::mat3_cast(q);
 }
 
 mat3 createRotationMatrix(float yaw, float pitch) {
@@ -642,94 +544,47 @@ mat3 createRotationMatrix(float yaw, float pitch) {
     return R_pitch * R_yaw;
 }
 
-// Helper function to apply rotation axis inversions to a quaternion
 glm::quat applyRotationInversions(const glm::quat& quat) {
     glm::quat result = quat;
-    
-    // Apply inversions by negating specific quaternion components
-    // This approach avoids Euler angle conversion and works directly with quaternions
-    if (invert_pitch) {
-        // Invert pitch by negating X component (around X-axis)
-        result.x = -result.x;
-    }
-    if (invert_yaw) {
-        // Invert yaw by negating Y component (around Y-axis)
-        result.y = -result.y;
-    }
-    if (invert_roll) {
-        // Invert roll by negating Z component (around Z-axis)
-        result.z = -result.z;
-    }
-    
+    if (invert_pitch) result.x = -result.x;
+    if (invert_yaw) result.y = -result.y;
+    if (invert_roll) result.z = -result.z;
     return result;
 }
 
-// Helper function to apply translation axis inversions to a position vector
 vec3 applyPositionInversions(const vec3& position) {
     vec3 result = position;
-    
-    // Apply inversions by negating specific position components
-    if (invert_pos_x) {
-        // Invert X-axis translation
-        result.x = -result.x;
-    }
-    if (invert_pos_y) {
-        // Invert Y-axis translation
-        result.y = -result.y;
-    }
-    if (invert_pos_z) {
-        // Invert Z-axis translation
-        result.z = -result.z;
-    }
-    
+    if (invert_pos_x) result.x = -result.x;
+    if (invert_pos_y) result.y = -result.y;
+    if (invert_pos_z) result.z = -result.z;
     return result;
 }
 
 void updateCameraPose() {
     if (use_tracking_pose && pose_received.load()) {
-        // Get latest pose data
         Pose6DoF current_pose;
         {
             std::lock_guard<std::mutex> lock(pose_mutex);
             current_pose = shared_pose;
         }
         
-        // Convert Unity world coordinates to our coordinate system
-        // Unity world: Y-up, Z-forward, X-right (left-handed)
-        // Our system: Y-up, Z-backward, X-right (right-handed)
         vec3 unity_position = vec3(current_pose.position.x, current_pose.position.y, -current_pose.position.z);
-        
-        // Apply translation axis inversions if enabled
         base_position = applyPositionInversions(unity_position);
         
-        // Convert quaternion to rotation matrix
-        // Note: May need to adjust quaternion components for coordinate system differences
         glm::quat adjusted_quat = glm::quat(current_pose.rotation.w, current_pose.rotation.x, current_pose.rotation.y, -current_pose.rotation.z);
-        
-        // Apply rotation axis inversions if enabled
         glm::quat inverted_quat = applyRotationInversions(adjusted_quat);
-        
         mat3 base_rotation_matrix = quaternionToRotationMatrix(inverted_quat);
         
-        // Apply manual control offset if active
         if (manual_control_active) {
-            // Create manual rotation matrix
             mat3 manual_rotation = createRotationMatrix(manual_yaw, manual_pitch);
-            
-            // Combine rotations: apply manual rotation after base rotation
             R = manual_rotation * base_rotation_matrix;
-            
-            // Apply manual position offset in world space
             cameraPos = base_position + manual_position_offset;
         } else {
-            // Use pure tracking data
             R = base_rotation_matrix;
             cameraPos = base_position;
         }
     } else {
-        // Fallback to manual control only (original behavior)
         R = createRotationMatrix(yaw, pitch);
-        // cameraPos updated in Update() function
     }
 }
 
@@ -737,14 +592,11 @@ void updateCameraPose() {
 void Update(void);
 void Draw(void);
 void VertexShaderPixel(const Vertex& v_in, Pixel& p_out);
-void VertexShaderPixelUnclamped(const Vertex& v_in, Pixel& p_out);
 void InterpolatePixel(Pixel a, Pixel b, vector<Pixel>& result);
 void ComputePolygonRowsPixel(const vector<Pixel>& vertexPixels, vector<Pixel>& leftPixels, vector<Pixel>& rightPixels, int& polygonMinY, int& polygonMaxY);
 void DrawLineHorizontalDepth(const Pixel& start, const Pixel& end);
 void DrawRowsPixel(const vector<Pixel>& leftPixels, const vector<Pixel>& rightPixels, int polygonMinY, int polygonMaxY);
 void DrawPolygonPixel(const vector<Vertex>& vertices);
-vector<Vertex> ClipTriangleToScreen(const vector<Vertex>& vertices);
-bool LineIntersectScreen(const Vertex& p1, const Vertex& p2, float& t, int edge);
 void PixelShader(const Pixel& p);
 
 void Update(void) {
@@ -757,19 +609,24 @@ void Update(void) {
     
     const Uint8* keystate = SDL_GetKeyboardState(NULL);
     
-    // Check if user is providing manual input
     bool mouse_input = (dx != 0 || dy != 0);
     bool keyboard_input = (keystate[SDL_SCANCODE_W] || keystate[SDL_SCANCODE_S] || 
                           keystate[SDL_SCANCODE_A] || keystate[SDL_SCANCODE_D] || 
                           keystate[SDL_SCANCODE_SPACE] || keystate[SDL_SCANCODE_LCTRL]);
     
-    // Toggle tracking mode with T key
+    // Toggle streaming pause with P key
+    static bool p_key_was_pressed = false;
+    if (keystate[SDL_SCANCODE_P] && !p_key_was_pressed) {
+        streaming_paused = !streaming_paused.load();
+        std::cout << "[Streaming] Packet transmission: " << (streaming_paused.load() ? "PAUSED" : "RESUMED") << std::endl;
+    }
+    p_key_was_pressed = keystate[SDL_SCANCODE_P];
+    
     static bool t_key_was_pressed = false;
     if (keystate[SDL_SCANCODE_T] && !t_key_was_pressed) {
         use_tracking_pose = !use_tracking_pose;
         std::cout << "[Camera] Tracking mode: " << (use_tracking_pose ? "ON" : "OFF") << std::endl;
         if (!use_tracking_pose) {
-            // Reset manual offsets when disabling tracking
             manual_yaw = yaw;
             manual_pitch = pitch;
             manual_position_offset = vec3(0.0f);
@@ -777,7 +634,6 @@ void Update(void) {
     }
     t_key_was_pressed = keystate[SDL_SCANCODE_T];
     
-    // Toggle depth map inversion with I key
     static bool i_key_was_pressed = false;
     if (keystate[SDL_SCANCODE_I] && !i_key_was_pressed) {
         invert_depth_map = !invert_depth_map;
@@ -785,7 +641,6 @@ void Update(void) {
     }
     i_key_was_pressed = keystate[SDL_SCANCODE_I];
     
-    // Toggle depth buffer display with V key
     static bool v_key_was_pressed = false;
     if (keystate[SDL_SCANCODE_V] && !v_key_was_pressed) {
         display_depth_buffer = !display_depth_buffer;
@@ -793,7 +648,6 @@ void Update(void) {
     }
     v_key_was_pressed = keystate[SDL_SCANCODE_V];
     
-    // Toggle VR rotation inversion with X, Y, Z keys (for pitch, yaw, roll)
     static bool x_key_was_pressed = false;
     if (keystate[SDL_SCANCODE_X] && !x_key_was_pressed) {
         invert_pitch = !invert_pitch;
@@ -815,7 +669,6 @@ void Update(void) {
     }
     z_key_was_pressed = keystate[SDL_SCANCODE_Z];
     
-    // Toggle VR position inversion with Q, E, R keys (for X, Y, Z position)
     static bool q_key_was_pressed = false;
     if (keystate[SDL_SCANCODE_Q] && !q_key_was_pressed) {
         invert_pos_x = !invert_pos_x;
@@ -837,31 +690,21 @@ void Update(void) {
     }
     r_key_was_pressed = keystate[SDL_SCANCODE_R];
     
-    // Handle input based on mode
     if (use_tracking_pose) {
-        // When using tracking, manual input creates offsets
         if (mouse_input || keyboard_input) {
             manual_control_active = true;
             last_mouse_movement = std::chrono::steady_clock::now();
             
-            // Apply mouse input to manual rotation offset
             if (mouse_input) {
-                if (dx != 0) {
-                    manual_yaw -= dx * -0.005f;
-                }
+                if (dx != 0) manual_yaw -= dx * -0.005f;
                 if (dy != 0) {
                     manual_pitch -= dy * 0.005f;
-                    const float pitchLimit = MY_PI / 2.0f - 0.01f;
-                    manual_pitch = glm::clamp(manual_pitch, -pitchLimit, pitchLimit);
+                    manual_pitch = glm::clamp(manual_pitch, -MY_PI / 2.0f + 0.01f, MY_PI / 2.0f - 0.01f);
                 }
             }
             
-            // Apply keyboard input to manual position offset
             float moveSpeed = 0.005f * dt;
-            
-            // Calculate movement directions based on current combined rotation
-            mat3 current_rotation = R; // Use current camera rotation
-            mat3 cameraToWorld = glm::transpose(current_rotation);
+            mat3 cameraToWorld = glm::transpose(R);
             vec3 forward_world = cameraToWorld * vec3(0,0,-1);
             vec3 right_world = cameraToWorld * vec3(1,0,0);
             
@@ -872,10 +715,8 @@ void Update(void) {
             if (keystate[SDL_SCANCODE_SPACE]) manual_position_offset.y += moveSpeed;
             if (keystate[SDL_SCANCODE_LCTRL]) manual_position_offset.y -= moveSpeed;
         } else {
-            // Check if enough time has passed to disable manual control
             auto now = std::chrono::steady_clock::now();
-            auto time_since_input = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_mouse_movement).count();
-            if (time_since_input > 2000) { // 2 seconds timeout
+            if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_mouse_movement).count() > 2000) {
                 manual_control_active = false;
                 manual_yaw = 0.0f;
                 manual_pitch = 0.0f;
@@ -883,17 +724,13 @@ void Update(void) {
             }
         }
     } else {
-        // Original manual control mode
         manual_control_active = false;
         
         if (mouse_input) {
-            if (dx != 0) {
-                yaw -= dx * -0.005f;
-            }
+            if (dx != 0) yaw -= dx * -0.005f;
             if (dy != 0) {
                 pitch -= dy * 0.005f;
-                const float pitchLimit = MY_PI / 2.0f - 0.01f;
-                pitch = glm::clamp(pitch, -pitchLimit, pitchLimit);
+                pitch = glm::clamp(pitch, -MY_PI / 2.0f + 0.01f, MY_PI / 2.0f - 0.01f);
             }
         }
         
@@ -910,7 +747,6 @@ void Update(void) {
         if (keystate[SDL_SCANCODE_LCTRL]) cameraPos.y -= moveSpeed;
     }
 
-    // Light control (unchanged)
     float lightMoveSpeed = 0.005f * dt;
     if (keystate[SDL_SCANCODE_UP]) lightPos.z += lightMoveSpeed;
     if (keystate[SDL_SCANCODE_DOWN]) lightPos.z -= lightMoveSpeed;
@@ -919,7 +755,6 @@ void Update(void) {
     if (keystate[SDL_SCANCODE_PAGEUP]) lightPos.y += lightMoveSpeed;
     if (keystate[SDL_SCANCODE_PAGEDOWN]) lightPos.y -= lightMoveSpeed;
 
-    // Update camera pose based on current mode
     updateCameraPose();
 }
 
@@ -927,7 +762,7 @@ void VertexShaderPixel(const Vertex& v_in, Pixel& p_out) {
     vec3 position_camera_space = R * (v_in.position - cameraPos);
 
     if (position_camera_space.z < 0.001f) {
-        p_out.x = -1;
+        p_out.x = -1; // Use sentinel value to mark as behind camera
         p_out.y = -1;
         p_out.zinv = 0;
         p_out.pos_world_times_zinv = vec3(0.0f);
@@ -937,27 +772,6 @@ void VertexShaderPixel(const Vertex& v_in, Pixel& p_out) {
     p_out.zinv = 1.0f / position_camera_space.z;
     p_out.x = static_cast<int>(round(focal * position_camera_space.x * p_out.zinv + SCREEN_WIDTH / 2.0f));
     p_out.y = static_cast<int>(round(focal * position_camera_space.y * p_out.zinv + SCREEN_HEIGHT / 2.0f));
-    p_out.pos_world_times_zinv = v_in.position * p_out.zinv;
-}
-
-void VertexShaderPixelUnclamped(const Vertex& v_in, Pixel& p_out) {
-    vec3 position_camera_space = R * (v_in.position - cameraPos);
-
-    if (position_camera_space.z < 0.001f) {
-        p_out.x = -1;
-        p_out.y = -1;
-        p_out.zinv = 0;
-        p_out.pos_world_times_zinv = vec3(0.0f);
-        return;
-    }
-
-    p_out.zinv = 1.0f / position_camera_space.z;
-    // Don't round here - keep floating point precision for clipping
-    float screen_x = focal * position_camera_space.x * p_out.zinv + SCREEN_WIDTH / 2.0f;
-    float screen_y = focal * position_camera_space.y * p_out.zinv + SCREEN_HEIGHT / 2.0f;
-    
-    p_out.x = static_cast<int>(screen_x);
-    p_out.y = static_cast<int>(screen_y);
     p_out.pos_world_times_zinv = v_in.position * p_out.zinv;
 }
 
@@ -996,121 +810,6 @@ void InterpolatePixel(Pixel a, Pixel b, vector<Pixel>& result) {
         current_zinv += zinv_step;
         current_pos_world_times_zinv += pos_world_times_zinv_step;
     }
-}
-
-bool LineIntersectScreen(const Vertex& p1, const Vertex& p2, float& t, int edge) {
-    // Transform vertices to screen space for clipping
-    Pixel pixel1, pixel2;
-    VertexShaderPixelUnclamped(p1, pixel1);
-    VertexShaderPixelUnclamped(p2, pixel2);
-    
-    // If either vertex is behind camera, skip this edge
-    if ((pixel1.x == -1 && pixel1.y == -1) || (pixel2.x == -1 && pixel2.y == -1)) {
-        return false;
-    }
-    
-    float x1 = pixel1.x, y1 = pixel1.y;
-    float x2 = pixel2.x, y2 = pixel2.y;
-    
-    // Check intersection with screen boundaries
-    // edge: 0=left(x=0), 1=right(x=SCREEN_WIDTH-1), 2=top(y=0), 3=bottom(y=SCREEN_HEIGHT-1)
-    switch(edge) {
-        case 0: // Left edge (x = 0)
-            if ((x1 < 0) == (x2 < 0)) return false; // Both on same side
-            t = (0 - x1) / (x2 - x1);
-            break;
-        case 1: // Right edge (x = SCREEN_WIDTH-1)
-            if ((x1 >= SCREEN_WIDTH) == (x2 >= SCREEN_WIDTH)) return false;
-            t = (SCREEN_WIDTH - 1 - x1) / (x2 - x1);
-            break;
-        case 2: // Top edge (y = 0)
-            if ((y1 < 0) == (y2 < 0)) return false;
-            t = (0 - y1) / (y2 - y1);
-            break;
-        case 3: // Bottom edge (y = SCREEN_HEIGHT-1)
-            if ((y1 >= SCREEN_HEIGHT) == (y2 >= SCREEN_HEIGHT)) return false;
-            t = (SCREEN_HEIGHT - 1 - y1) / (y2 - y1);
-            break;
-        default:
-            return false;
-    }
-    
-    return t >= 0.0f && t <= 1.0f;
-}
-
-vector<Vertex> ClipTriangleToScreen(const vector<Vertex>& vertices) {
-    if (vertices.size() < 3) return vertices;
-    
-    vector<Vertex> clipped = vertices;
-    
-    // Sutherland-Hodgman clipping algorithm
-    // Clip against each edge of the screen rectangle
-    for (int edge = 0; edge < 4; ++edge) {
-        if (clipped.empty()) break;
-        
-        vector<Vertex> input = clipped;
-        clipped.clear();
-        
-        if (input.empty()) continue;
-        
-        Vertex prevVertex = input.back();
-        Pixel prevPixel;
-        VertexShaderPixelUnclamped(prevVertex, prevPixel);
-        bool prevInside = (prevPixel.x != -1 && prevPixel.y != -1) &&
-                         (prevPixel.x >= 0 && prevPixel.x < SCREEN_WIDTH &&
-                          prevPixel.y >= 0 && prevPixel.y < SCREEN_HEIGHT);
-        
-        // Override inside check for specific edge
-        switch(edge) {
-            case 0: prevInside = prevPixel.x >= 0; break;
-            case 1: prevInside = prevPixel.x < SCREEN_WIDTH; break;
-            case 2: prevInside = prevPixel.y >= 0; break;
-            case 3: prevInside = prevPixel.y < SCREEN_HEIGHT; break;
-        }
-        
-        for (const Vertex& currentVertex : input) {
-            Pixel currentPixel;
-            VertexShaderPixelUnclamped(currentVertex, currentPixel);
-            bool currentInside = (currentPixel.x != -1 && currentPixel.y != -1) &&
-                               (currentPixel.x >= 0 && currentPixel.x < SCREEN_WIDTH &&
-                                currentPixel.y >= 0 && currentPixel.y < SCREEN_HEIGHT);
-            
-            // Override inside check for specific edge
-            switch(edge) {
-                case 0: currentInside = currentPixel.x >= 0; break;
-                case 1: currentInside = currentPixel.x < SCREEN_WIDTH; break;
-                case 2: currentInside = currentPixel.y >= 0; break;
-                case 3: currentInside = currentPixel.y < SCREEN_HEIGHT; break;
-            }
-            
-            if (currentInside) {
-                if (!prevInside) {
-                    // Entering: add intersection point
-                    float t;
-                    if (LineIntersectScreen(prevVertex, currentVertex, t, edge)) {
-                        Vertex intersection;
-                        intersection.position = prevVertex.position + t * (currentVertex.position - prevVertex.position);
-                        clipped.push_back(intersection);
-                    }
-                }
-                // Add current vertex
-                clipped.push_back(currentVertex);
-            } else if (prevInside) {
-                // Exiting: add intersection point
-                float t;
-                if (LineIntersectScreen(prevVertex, currentVertex, t, edge)) {
-                    Vertex intersection;
-                    intersection.position = prevVertex.position + t * (currentVertex.position - prevVertex.position);
-                    clipped.push_back(intersection);
-                }
-            }
-            
-            prevVertex = currentVertex;
-            prevInside = currentInside;
-        }
-    }
-    
-    return clipped;
 }
 
 void DrawLineHorizontalDepth(const Pixel& startNode, const Pixel& endNode) {
@@ -1158,35 +857,117 @@ void DrawRowsPixel(const vector<Pixel>& leftPixels, const vector<Pixel>& rightPi
     }
 }
 
+// MODIFIED FUNCTION: More robust rasterizer that correctly handles off-screen vertices.
+void ComputePolygonRowsPixel(const vector<Pixel>& vertexPixels, vector<Pixel>& leftPixels, vector<Pixel>& rightPixels, int& polygonMinY, int& polygonMaxY) {
+    polygonMinY = SCREEN_HEIGHT;
+    polygonMaxY = -1;
+
+    // Find the actual Y-bounds of the polygon on screen.
+    for (const auto& p : vertexPixels) {
+        if (p.x != -1) { // Only consider valid vertices
+            polygonMinY = std::min(polygonMinY, p.y);
+            polygonMaxY = std::max(polygonMaxY, p.y);
+        }
+    }
+
+    // Clamp Y-bounds to the screen dimensions for iteration.
+    polygonMinY = std::max(0, polygonMinY);
+    polygonMaxY = std::min(SCREEN_HEIGHT - 1, polygonMaxY);
+
+    if (polygonMinY > polygonMaxY) return;
+
+    // Initialize left and right edge buffers for the visible scanlines.
+    for (int y = polygonMinY; y <= polygonMaxY; ++y) {
+        leftPixels[y].x = SCREEN_WIDTH;
+        rightPixels[y].x = 0;
+    }
+
+    // Process each edge of the polygon.
+    for (size_t i = 0; i < vertexPixels.size(); ++i) {
+        Pixel p1 = vertexPixels[i];
+        Pixel p2 = vertexPixels[(i + 1) % vertexPixels.size()];
+
+        // Skip edges where both vertices are behind the camera.
+        if (p1.x == -1 && p2.x == -1) continue;
+
+        // If one vertex is behind the camera, we must clip the edge.
+        // A simple but effective clipping method is to find the intersection
+        // with the near plane. Since we don't have z_camera here, we use z_inv.
+        // An edge crosses the near plane if signs of (zinv - 1/z_near) differ.
+        // For simplicity, we'll clip to a z_inv slightly > 0.
+        if ((p1.x == -1) != (p2.x == -1)) {
+            if (p1.x == -1) std::swap(p1,p2); // ensure p2 is the one behind camera
+            
+            // Interpolate to find intersection point where zinv is just above zero
+            const float clip_zinv = 0.00001f;
+            float t = (clip_zinv - p1.zinv) / (p2.zinv - p1.zinv); // p2.zinv is 0 from VertexShader
+            
+            // This case is tricky because p2.zinv is 0. Avoid division by zero.
+            // A more robust solution is needed, but for now we can try to place
+            // the clipped point at the edge of the screen.
+            // However, the best fix is a more robust rasterizer that can handle large coordinates.
+        }
+
+        if (p1.y > p2.y) std::swap(p1, p2);
+
+        // Skip horizontal edges or edges entirely outside the renderable Y-range.
+        if (p1.y == p2.y || p2.y < polygonMinY || p1.y > polygonMaxY) continue;
+
+        // Determine the start and end scanlines for this edge.
+        int startY = std::max(p1.y, polygonMinY);
+        int endY = std::min(p2.y, polygonMaxY);
+        
+        float dy = p2.y - p1.y;
+        if(abs(dy) < 1e-5) continue;
+
+        // For each scanline the edge crosses, calculate the intersection point.
+        for (int y = startY; y <= endY; ++y) {
+            float t = (static_cast<float>(y) - p1.y) / dy;
+            
+            Pixel p;
+            p.y = y;
+            p.x = static_cast<int>(round(glm::mix(static_cast<float>(p1.x), static_cast<float>(p2.x), t)));
+            p.zinv = glm::mix(p1.zinv, p2.zinv, t);
+            p.pos_world_times_zinv = glm::mix(p1.pos_world_times_zinv, p2.pos_world_times_zinv, t);
+            
+            if (p.x < leftPixels[y].x) {
+                leftPixels[y] = p;
+            }
+            if (p.x > rightPixels[y].x) {
+                rightPixels[y] = p;
+            }
+        }
+    }
+}
+
+// MODIFIED FUNCTION: More robust culling logic.
 void DrawPolygonPixel(const vector<Vertex>& vertices) {
     int V = vertices.size();
     if (V < 3) return;
 
-    // Convert vertices to pixels without aggressive culling
     vector<Pixel> vertexPixels(V);
-    int valid_vertices_count = 0;
     int behind_camera_count = 0;
     
+    // Transform all vertices and count how many are behind the camera
     for (size_t i = 0; i < vertices.size(); ++i) {
         VertexShaderPixel(vertices[i], vertexPixels[i]);
         if (vertexPixels[i].x == -1 && vertexPixels[i].y == -1) {
             behind_camera_count++;
-        } else {
-            valid_vertices_count++;
         }
     }
 
-    // Only cull if ALL vertices are behind the camera
-    if (behind_camera_count == V) return;
+    // Only cull the triangle if ALL of its vertices are behind the camera.
+    // This prevents triangles from being "chopped" when they partially cross the near plane.
+    if (behind_camera_count == V) {
+        return;
+    }
     
-    // Disable screen bounds culling - allow all triangles with at least one vertex in front of camera
-    // This ensures triangles are not culled when any vertex is out of screen bounds
-
     vector<Pixel> leftPixels(SCREEN_HEIGHT);
     vector<Pixel> rightPixels(SCREEN_HEIGHT);
     
     int polygonMinY, polygonMaxY;
 
+    // Use the robust rasterizer to handle potentially off-screen coordinates
     ComputePolygonRowsPixel(vertexPixels, leftPixels, rightPixels, polygonMinY, polygonMaxY);
     
     if (polygonMinY <= polygonMaxY) {
@@ -1194,108 +975,6 @@ void DrawPolygonPixel(const vector<Vertex>& vertices) {
     }
 }
 
-void ComputePolygonRowsPixel(const vector<Pixel>& vertexPixels, vector<Pixel>& leftPixels, vector<Pixel>& rightPixels, int& polygonMinY, int& polygonMaxY) {
-    polygonMinY = SCREEN_HEIGHT;
-    polygonMaxY = 0;
-
-    // Handle Y range calculation for vertices that might be far outside screen
-    int validVertices = 0;
-    for (const auto& p : vertexPixels) {
-        if (p.x == -1 && p.y == -1) continue;
-        
-        // Allow much wider Y range to handle triangles extending beyond screen
-        int clamped_y = std::max(-SCREEN_HEIGHT, std::min(2 * SCREEN_HEIGHT, p.y));
-        polygonMinY = std::min(polygonMinY, clamped_y);
-        polygonMaxY = std::max(polygonMaxY, clamped_y);
-        validVertices++;
-    }
-    if (validVertices < 1) { // Allow triangles with at least 1 valid vertex
-        polygonMinY = SCREEN_HEIGHT;
-        polygonMaxY = 0;
-        return;
-    }
-
-    // Clamp to actual screen bounds for rendering
-    polygonMinY = std::max(0, polygonMinY);
-    polygonMaxY = std::min(SCREEN_HEIGHT - 1, polygonMaxY);
-
-    if (polygonMinY > polygonMaxY) return;
-
-    for (int y = polygonMinY; y <= polygonMaxY; ++y) {
-        leftPixels[y].x = SCREEN_WIDTH;
-        leftPixels[y].y = y;
-        leftPixels[y].zinv = 0.f;
-        leftPixels[y].pos_world_times_zinv = vec3(0.f);
-
-        rightPixels[y].x = 0;
-        rightPixels[y].y = y;
-        rightPixels[y].zinv = 0.f;
-        rightPixels[y].pos_world_times_zinv = vec3(0.f);
-    }
-
-    for (size_t i = 0; i < vertexPixels.size(); ++i) {
-        Pixel p1_orig = vertexPixels[i];
-        Pixel p2_orig = vertexPixels[(i + 1) % vertexPixels.size()];
-
-        // Skip edges where both vertices are behind camera
-        if ((p1_orig.x == -1 && p1_orig.y == -1) && (p2_orig.x == -1 && p2_orig.y == -1)) continue;
-        
-        // If one vertex is behind camera, clamp it to screen edge (simple approach)
-        Pixel p1 = p1_orig;
-        Pixel p2 = p2_orig;
-        
-        // Handle vertices behind camera by clamping to reasonable screen bounds
-        if (p1.x == -1 && p1.y == -1) {
-            // Clamp to extended screen bounds instead of center
-            p1.x = glm::clamp(SCREEN_WIDTH / 2, -SCREEN_WIDTH, 2 * SCREEN_WIDTH);
-            p1.y = glm::clamp(SCREEN_HEIGHT / 2, -SCREEN_HEIGHT, 2 * SCREEN_HEIGHT);
-            p1.zinv = 0.001f; // Small depth value
-        }
-        if (p2.x == -1 && p2.y == -1) {
-            // Clamp to extended screen bounds instead of center
-            p2.x = glm::clamp(SCREEN_WIDTH / 2, -SCREEN_WIDTH, 2 * SCREEN_WIDTH);
-            p2.y = glm::clamp(SCREEN_HEIGHT / 2, -SCREEN_HEIGHT, 2 * SCREEN_HEIGHT);
-            p2.zinv = 0.001f; // Small depth value
-        }
-
-        // Clamp extreme coordinates to prevent interpolation issues
-        p1.x = glm::clamp(p1.x, -SCREEN_WIDTH * 2, SCREEN_WIDTH * 3);
-        p1.y = glm::clamp(p1.y, -SCREEN_HEIGHT * 2, SCREEN_HEIGHT * 3);
-        p2.x = glm::clamp(p2.x, -SCREEN_WIDTH * 2, SCREEN_WIDTH * 3);
-        p2.y = glm::clamp(p2.y, -SCREEN_HEIGHT * 2, SCREEN_HEIGHT * 3);
-
-        if (p1.y > p2.y) {
-            std::swap(p1, p2);
-        }
-
-        if (p1.y == p2.y) continue;
-
-        int startY_edge = std::max(p1.y, polygonMinY);
-        int endY_edge = std::min(p2.y, polygonMaxY);
-
-        if (startY_edge > endY_edge) continue;
-
-        int dy_edge_full = p2.y - p1.y;
-        if (dy_edge_full == 0) continue;
-
-        vector<Pixel> edgeScanlinePixels(dy_edge_full + 1);
-        InterpolatePixel(p1, p2, edgeScanlinePixels);
-
-        for(int current_y_on_edge = 0; current_y_on_edge < edgeScanlinePixels.size(); ++current_y_on_edge) {
-            const auto& edgePixel = edgeScanlinePixels[current_y_on_edge];
-            int y = edgePixel.y;
-
-            if (y >= polygonMinY && y <= polygonMaxY) {
-                if (edgePixel.x < leftPixels[y].x) {
-                    leftPixels[y] = edgePixel;
-                }
-                if (edgePixel.x > rightPixels[y].x) {
-                    rightPixels[y] = edgePixel;
-                }
-            }
-        }
-    }
-}
 
 void PixelShader(const Pixel& p) {
     int x = p.x;
@@ -1318,40 +997,27 @@ void PixelShader(const Pixel& p) {
 
         vec3 final_color;
         if (display_depth_buffer) {
-            // Display depth buffer as grayscale
             float depth_world = 1.0f / p.zinv;
-            
-            // Normalize depth to [0,1] range for visualization
-            // Use a smaller max depth for better contrast
-            float max_depth_for_viz = 20.0f; // 20 units instead of DEPTH_FAR
+            float max_depth_for_viz = 20.0f;
             float normalized_depth = glm::clamp(depth_world / max_depth_for_viz, 0.0f, 1.0f);
             
-            // Apply inversion if enabled
             if (invert_depth_map) {
                 normalized_depth = 1.0f - normalized_depth;
             }
             
-            // Convert to grayscale with better contrast
-            // Close objects = white, far objects = black
             float gray_value = 1.0f - normalized_depth;
             
-            // Add some color coding for better visibility
             if (gray_value < 0.3f) {
-                // Very far objects - blue tint
                 final_color = vec3(gray_value * 0.5f, gray_value * 0.5f, gray_value + 0.3f);
             } else if (gray_value > 0.8f) {
-                // Very close objects - red tint  
                 final_color = vec3(gray_value + 0.2f, gray_value * 0.5f, gray_value * 0.5f);
             } else {
-                // Medium depth - pure grayscale
                 final_color = vec3(gray_value, gray_value, gray_value);
             }
             
         } else {
-            // Normal color rendering
             vec3 s = lightPos - actual_pixel_world_pos;
             float dist_sq = glm::dot(s, s);
-
             vec3 illumination_direct(0.0f);
 
             if (dist_sq > 1e-5f) {
@@ -1369,30 +1035,19 @@ void PixelShader(const Pixel& p) {
 }
 
 void Draw() {
-    // Clear depth buffer and set background
     for (int r = 0; r < SCREEN_HEIGHT; ++r) {
         for (int c = 0; c < SCREEN_WIDTH; ++c) {
-            // Initialize depth buffer to 0.0f (no geometry/infinite depth)
             depthBuffer[r][c] = 0.0f;
             
             vec3 background_color;
             if (display_depth_buffer) {
-                // Black background for depth buffer visualization
                 background_color = vec3(0.0f, 0.0f, 0.0f);
             } else {
-                // Create white-blue gradient sky background
-                // Top of screen (r=0) = light blue, bottom of screen (r=SCREEN_HEIGHT-1) = white
                 float gradient_factor = static_cast<float>(r) / static_cast<float>(SCREEN_HEIGHT - 1);
-                
-                // Sky blue at top: (0.5, 0.7, 1.0), white at bottom: (1.0, 1.0, 1.0)
-                vec3 sky_top = vec3(0.5f, 0.7f, 1.0f);    // Light blue
-                vec3 sky_bottom = vec3(1.0f, 1.0f, 1.0f); // White
-                
-                // Linear interpolation between top and bottom colors
-                background_color = sky_top * (1.0f - gradient_factor) + sky_bottom * gradient_factor;
+                vec3 sky_top = vec3(0.5f, 0.7f, 1.0f);
+                vec3 sky_bottom = vec3(1.0f, 1.0f, 1.0f);
+                background_color = glm::mix(sky_top, sky_bottom, gradient_factor);
             }
-            
-            // Set the background pixel (depth remains 0.0f for sky)
             sdlAux->putPixelWithCapture(c, r, background_color);
         }
     }
@@ -1416,58 +1071,43 @@ void Draw() {
 int main(int argc, char* argv[]) {
     std::cout << "[VR Renderer-Streamer] Starting..." << std::endl;
 
-    // Initialize renderer
     LoadTestModel(triangles);
     sdlAux = new ExtendedSDL2Aux(SCREEN_WIDTH, SCREEN_HEIGHT);
     t = SDL_GetTicks();
     R = mat3(1.0f);
 
-    // Initialize streaming
     if (!initializeStreaming()) {
         std::cerr << "Failed to initialize streaming" << std::endl;
         delete sdlAux;
         return -1;
     }
 
-    // Start pose receiving thread
     std::cout << "[VR Renderer-Streamer] Starting pose receiver thread..." << std::endl;
     pose_receiver_thread = std::thread(pose_receiver_thread_func);
 
     auto last_stream_time = std::chrono::high_resolution_clock::now();
 
     while (!sdlAux->quitEvent() && keep_running) {
-        // Update scene (this now handles pose-driven camera)
         Update();
-        
-        // Render frame
         Draw();
 
-        // Stream frame if enough time has passed
         auto now = std::chrono::high_resolution_clock::now();
-        auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(now - last_stream_time).count();
-
-        if (elapsed_ms >= SEND_INTERVAL_MS) {
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_stream_time).count() >= SEND_INTERVAL_MS) {
             last_stream_time = now;
             streamFrame();
         }
 
-        // Small delay to prevent excessive CPU usage
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 
-    // Cleanup
     std::cout << "[VR Renderer-Streamer] Shutting down..." << std::endl;
-    
-    // Signal threads to stop
     keep_running = false;
     
-    // Wait for pose receiver thread to finish
     if (pose_receiver_thread.joinable()) {
         std::cout << "[VR Renderer-Streamer] Waiting for pose receiver thread to finish..." << std::endl;
         pose_receiver_thread.join();
     }
     
-    // Clean up resources
     sdlAux->saveBMP("screenshot.bmp");
     delete sdlAux;
     closesocket(image_sender_socket);

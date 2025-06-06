@@ -79,3 +79,24 @@ From the VR receiver to the streamer (PORT 8052):
 - Field of View (in future)
 
 - IPD (in future)
+
+Control Commands:
+
+Streamer (C++) Controls:
+- P key: Toggle packet transmission pause/resume
+- T key: Toggle VR tracking mode on/off
+- V key: Toggle depth buffer visualization on/off
+- I key: Toggle depth map inversion on/off
+- X, Y, Z keys: Toggle VR rotation axis inversions (pitch, yaw, roll)
+- Q, E, R keys: Toggle VR position axis inversions (X, Y, Z)
+
+Unity Receiver Controls:
+- P key (configurable): Toggle packet transmission pause/resume
+- Public methods: PauseStreaming(), ResumeStreaming(), ToggleStreamingPause()
+- Inspector checkbox: Manual streaming pause control
+
+When paused:
+- C++ streamer: Stops sending color/depth data packets
+- Unity receiver: Stops sending pose data packets and processing received images
+- Both systems continue running but skip packet transmission/processing
+- Received packets are still dequeued to prevent memory buildup
